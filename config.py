@@ -17,11 +17,15 @@ VAPID_SUB = os.environ.get("VAPID_SUB", "mailto:desk@localhost")
 TG_TOKEN = os.environ.get("TG_TOKEN", "")            # skipped in STEP 2
 TG_CHAT_ID = os.environ.get("TG_CHAT_ID", "")
 TYPESAFE_API_KEY = os.environ.get("TYPESAFE_API_KEY", "")   # Jev — skipped in STEP 2
+# Solana RPC / websocket. Env wins over the desk.rpc_url / desk.ws_url settings so a keyed (Helius-style)
+# URL can live only in /etc/grok-desk/desk.env: never logged, never in an API response.
+SOLANA_RPC_URL = os.environ.get("SOLANA_RPC_URL", "")
+SOLANA_WS_URL = os.environ.get("SOLANA_WS_URL", "")
 PUBLIC_URL = os.environ.get("PUBLIC_URL", "")
 HOST = os.environ.get("DESK_HOST", "127.0.0.1")
 PORT = int(os.environ.get("DESK_PORT", "8787"))
 
-SECRET_ENV_NAMES = ("APP_TOKEN", "VAPID_PRIVATE_KEY", "TG_TOKEN", "TYPESAFE_API_KEY")
+SECRET_ENV_NAMES = ("APP_TOKEN", "VAPID_PRIVATE_KEY", "TG_TOKEN", "TYPESAFE_API_KEY", "SOLANA_RPC_URL", "SOLANA_WS_URL")
 
 TOKEN_PROGRAM = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
 # decisions.md: the prompt's Token-2022 id is invalid (RPC -32602 WrongSize); this is the real one.
@@ -45,16 +49,18 @@ DEFAULTS = {
                 "timeout_s": 10, "state_max_chars": 3000,
                 "rules_alive_volume_m5": 2000, "rules_organic_buys_m5": 12, "rules_bundled_penalty": 0.5,
                 "rules_bundled_from": 3, "rules_flush_pct": 5, "rules_flush_max_pct": 30, "rules_chase_h1_pct": 80,
-                "rules_crash_h1_pct": 50},
+                "rules_crash_h1_pct": 50, "max_m5_change_pct": 100},
     "executor": {"stack_pct": 8, "max_open": 2, "min_ticket_usd": 10.0, "below_min": "bump",
                  "recheck_liq_drop_pct": 20, "recheck_price_move_pct": 15, "confirm_min": 5,
                  "max_liq_pct": 2, "reentry_cooldown_min": 60},
     "risk": {"poll_s": 15, "stop_pct": 6, "trail_start_pct": 20, "trail_pct": 12, "timeout_h": 3,
              "timeout_min_gain_pct": 5, "sold_wait_min": 2, "no_price_polls": 4, "backoff_429_s": 30,
              "volatile_m5_pct": 15, "volatile_factor": 1, "runner_trail_pct": 30,
-             "pulled_liq_drop_pct": 50, "pulled_price_drop_pct": 50},
+             "pulled_liq_drop_pct": 50, "pulled_price_drop_pct": 50,
+             "price_source": "auto", "ws_max_diff_pct": 20, "rug_liq_drop_fast_pct": 25, "rug_window_s": 20,
+             "rug_dev_sell_pct": 50, "rug_dev_min_supply_pct": 1},
     "desk": {"mode": "PAPER", "paper_start_stack": 200, "report_time": "08:00", "notifier": "webpush",
-             "rpc_url": "https://api.mainnet-beta.solana.com", "push_rejects": False,
+             "rpc_url": "https://api.mainnet-beta.solana.com", "ws_url": "wss://api.mainnet-beta.solana.com", "push_rejects": False,
              "fees_ref_discount": 0.10, "fomo_handle": "rogzyy3", "tz": "Europe/Istanbul"},
 }
 
@@ -75,6 +81,7 @@ RANGES = {
     "analyst.rules_bundled_penalty": (0, 1, 0.05), "analyst.rules_bundled_from": (1, 20, 1),
     "analyst.rules_flush_pct": (1, 50, 1), "analyst.rules_flush_max_pct": (5, 90, 1),
     "analyst.rules_chase_h1_pct": (10, 300, 5), "analyst.rules_crash_h1_pct": (10, 95, 1),
+    "analyst.max_m5_change_pct": (20, 1000, 5),
     "executor.stack_pct": (1, 50, 0.5), "executor.max_open": (1, 10, 1), "executor.min_ticket_usd": (5, 500, 0.5),
     "executor.recheck_liq_drop_pct": (1, 80, 1), "executor.recheck_price_move_pct": (1, 80, 1),
     "executor.confirm_min": (0, 60, 1), "executor.max_liq_pct": (0.1, 10, 0.1),
@@ -84,6 +91,8 @@ RANGES = {
     "risk.sold_wait_min": (1, 30, 1), "risk.no_price_polls": (1, 20, 1), "risk.backoff_429_s": (5, 300, 5),
     "risk.volatile_m5_pct": (3, 100, 1), "risk.volatile_factor": (0.1, 1, 0.05),
     "risk.runner_trail_pct": (5, 80, 1), "risk.pulled_liq_drop_pct": (10, 95, 1), "risk.pulled_price_drop_pct": (10, 95, 1),
+    "risk.ws_max_diff_pct": (5, 50, 1), "risk.rug_liq_drop_fast_pct": (5, 90, 1), "risk.rug_window_s": (5, 120, 1),
+    "risk.rug_dev_sell_pct": (10, 100, 5), "risk.rug_dev_min_supply_pct": (0.1, 20, 0.1),
     "desk.paper_start_stack": (10, 10000, 10), "desk.fees_ref_discount": (0, 0.5, 0.01),
 }
 
@@ -100,6 +109,20 @@ ALIASES = {"stop": "risk.stop_pct", "trail": "risk.trail_pct", "trail start": "r
 OBSOLETE = ("analyst.rules_alive_volume_h1", "analyst.rules_organic_buys_h1")
 
 AGENTS = ("scanner", "auditor", "analyst", "executor", "risk")
+
+
+def rpc_url(db=None):
+    return SOLANA_RPC_URL or (db.get("desk.rpc_url") if db else None) or DEFAULTS["desk"]["rpc_url"]
+
+
+def ws_url(db=None):
+    """SOLANA_WS_URL env, else derived from SOLANA_RPC_URL env (https -> wss), else desk.ws_url."""
+    if SOLANA_WS_URL:
+        return SOLANA_WS_URL
+    if SOLANA_RPC_URL:
+        return "wss://" + SOLANA_RPC_URL.split("://", 1)[-1] if SOLANA_RPC_URL.startswith("https") else \
+            "ws://" + SOLANA_RPC_URL.split("://", 1)[-1]
+    return (db.get("desk.ws_url") if db else None) or DEFAULTS["desk"]["ws_url"]
 
 
 def min_stack(min_ticket: float, stack_pct: float) -> float:

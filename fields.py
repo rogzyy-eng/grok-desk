@@ -33,7 +33,7 @@ def migration(msg: dict) -> Optional[dict]:
 
 # ---------- DexScreener tokens/v1/solana/{mint} -> list of pairs ----------
 PAIR_PATHS = {
-    "pair_address": "pairAddress", "dex_id": "dexId", "price_usd": "priceUsd",
+    "pair_address": "pairAddress", "dex_id": "dexId", "price_usd": "priceUsd", "price_native": "priceNative",
     "liq_usd": "liquidity.usd", "mcap": "marketCap",
     "vol_m5": "volume.m5", "vol_h1": "volume.h1", "vol_h24": "volume.h24",
     "buys_m5": "txns.m5.buys", "sells_m5": "txns.m5.sells",
@@ -45,7 +45,7 @@ PAIR_PATHS = {
 
 def pair(p: dict) -> dict:
     out = {k: _get(p, v) for k, v in PAIR_PATHS.items()}
-    for k in ("price_usd", "liq_usd", "mcap", "vol_m5", "vol_h1", "vol_h24", "chg_m5", "chg_h1",
+    for k in ("price_usd", "price_native", "liq_usd", "mcap", "vol_m5", "vol_h1", "vol_h24", "chg_m5", "chg_h1",
               "chg_h24", "buys_m5", "sells_m5", "buys_h1", "sells_h1", "created_ms"):
         out[k] = _num(out[k])
     out["base_mint"] = _get(p, "baseToken.address")   # SOURCE: dexscreener_latest_dex_tokens.json

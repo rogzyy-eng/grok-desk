@@ -137,6 +137,10 @@ class Executor(Agent):
         ok, why = self.recheck(ref, p1, c)
         if not ok:
             return self._skip(mint, why)
+        from agents.analyst import m5_cap_reason      # same cap on the fresh pair just before the buy
+        capped = m5_cap_reason(p1.get("chg_m5"), self.db.get("analyst.max_m5_change_pct", 100))
+        if capped:
+            return self._skip(mint, capped)
         size, note = size_ticket(stack_now(self.db), c, p1.get("liq_usd"))
         if size is None:
             return self._skip(mint, note)

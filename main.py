@@ -24,7 +24,7 @@ class Desk:
         self.notifier = Notifier(self.db, self.bus)
         if src is None:
             from sources import Sources
-            src = Sources(self.db.get("desk.rpc_url"))
+            src = Sources(config.rpc_url(self.db))
         self.src = src
         a = (self.db, self.bus, self.src, self.notifier)
         self.scanner, self.auditor, self.analyst = Scanner(*a, clock=clock), Auditor(*a, clock=clock), Analyst(*a, clock=clock)

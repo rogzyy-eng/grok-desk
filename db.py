@@ -67,7 +67,8 @@ class DB:
                                 "entry_liq_usd": "REAL", "trail_start_pct": "REAL", "trail_pct": "REAL", "timeout_h": "REAL",
                                 "runner_trail_pct": "REAL", "entry_impact_pct": "REAL", "market_entry_price": "REAL",
                                 "runner": "INTEGER DEFAULT 0", "partial_at": "REAL", "partial_qty": "REAL",
-                                "partial_price": "REAL", "partial_usd": "REAL", "partial_fee": "REAL", "last_liq_usd": "REAL"}}
+                                "partial_price": "REAL", "partial_usd": "REAL", "partial_fee": "REAL", "last_liq_usd": "REAL",
+                                "price_source": "TEXT"}}
 
     def migrate(self):
         for table, cols in self.MIGRATIONS.items():

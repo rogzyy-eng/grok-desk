@@ -54,6 +54,15 @@ def rules_answers(p, bundled, c):
     return {"alive_6h": round(alive, 2), "organic": round(organic, 2), "flush": round(flush, 2), "chase": round(chase, 2)}
 
 
+def m5_cap_reason(m5, cap):
+    """Momentum cap: a coin already up more than [analyst.max_m5_change_pct] in 5 min is the top, not the
+    start (2026-11-12: every buy at m5 +190..234% lost). -> Turkish reason or None."""
+    if m5 is None or cap is None:
+        return None
+    m5, cap = float(m5), float(cap)
+    return f"zirve kovalama: 5dk +%{m5:.0f} > %{cap:g}" if m5 > cap else None
+
+
 def gate(a, c):
     score = round(100 * (a["alive_6h"] + a["organic"] + a["flush"] + (1 - a["chase"])) / 4)
     failed = []
@@ -96,6 +105,9 @@ class Analyst(Agent):
         else:
             ans = rules_answers(pair, auditor_out.get("bundled"), c)
         score, failed = gate(ans, c)
+        capped = m5_cap_reason(pair.get("chg_m5"), c.get("max_m5_change_pct", 100))
+        if capped:
+            failed.insert(0, capped)
         passed = not failed
         out = {"agent": "analyst", "mint": mint, "answers": ans, "score": score, "passed": passed, "failed": failed,
                "model": model, "inputTokens": tokens, "mode": mode, "label": self.label(mode), "state": state, "ts": iso(self.clock())}

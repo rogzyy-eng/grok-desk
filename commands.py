@@ -45,7 +45,7 @@ def set_mode(db, mode, confirm="", who="app"):
 PROTECTED = {"desk.mode", "desk.paper_nights", "desk.paper_since", "desk.layer8_proof", "desk.last_night_closed",
              "desk.paused_agents", "desk.layer8_down_kills", "desk.live_stack", "desk.last_page_url"}
 CHOICES = {"desk.notifier": ("webpush", "telegram", "none"), "analyst.mode": ("rules", "jev"),
-           "executor.below_min": ("bump", "skip")}
+           "executor.below_min": ("bump", "skip"), "risk.price_source": ("auto", "poll")}
 
 
 def coerce(old, raw):
