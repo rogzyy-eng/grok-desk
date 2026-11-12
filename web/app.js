@@ -10,9 +10,19 @@ const KEY = "desk_token";
 const token = () => localStorage.getItem(KEY) || "";
 let state = null, tab = "home", es = null;
 
+// 401 must leave the login screen up. Callers that would paint an error box
+// ignore this sentinel so they cannot overwrite login("Access code was rejected.").
+function rejectAuth() {
+  localStorage.removeItem(KEY);
+  login("Access code was rejected.");
+  const e = new Error("401");
+  e.authRejected = true;
+  throw e;
+}
+
 async function api(path, opt = {}) {
   const r = await fetch(path, { ...opt, headers: { "Authorization": "Bearer " + token(), "Content-Type": "application/json", ...(opt.headers || {}) } });
-  if (r.status === 401) { localStorage.removeItem(KEY); login("Access code was rejected."); throw new Error("401"); }
+  if (r.status === 401) rejectAuth();
   const j = await r.json().catch(() => ({}));
   if (!r.ok) throw new Error(j.detail || ("HTTP " + r.status));
   return j;
@@ -88,7 +98,7 @@ async function loadState() { state = await api("/api/state"); badge(); return st
 
 async function home() {
   setTitle("Desk"); const v = $("#view"); if (!state) v.innerHTML = loading();
-  try { await loadState(); } catch (e) { v.innerHTML = errorBox(e); return; }
+  try { await loadState(); } catch (e) { if (e.authRejected) return; v.innerHTML = errorBox(e); return; }
   const s = state, pnl = s.equity_usd - s.start_stack, banners = [];
   if (s.layer8_proof && !s.layer8_proof.passed) banners.push(`<div class="banner red">LAYER 8 proof failed — desk is paused until it passes. ${esc(s.layer8_proof.error || "")}</div>`);
   if (s.paused) banners.push(`<div class="banner">Desk paused — Risk still guards open positions.</div>`);
@@ -117,7 +127,7 @@ async function home() {
 
 async function agents() {
   setTitle("Agents"); const v = $("#view"); v.innerHTML = loading();
-  let d; try { d = await api("/api/agents"); } catch (e) { v.innerHTML = errorBox(e); return; }
+  let d; try { d = await api("/api/agents"); } catch (e) { if (e.authRejected) return; v.innerHTML = errorBox(e); return; }
   const role = { scanner: "Watches PumpSwap migrations", auditor: "8 safety layers", analyst: "Alive · organic · chase", executor: "Sizes tickets · never places orders", risk: "Stop · trail · timeout" };
   v.innerHTML = `<div class="list">${d.agents.map(a => { const hb = a.heartbeat, age = hb ? Date.now() / 1000 - hb.ts : 1e9;
     const st = !hb ? ["wait", "starting"] : hb.status === "error" ? ["bad", "error"] : age > 180 ? ["bad", "stale"] : ["ok", "live"];
@@ -125,7 +135,7 @@ async function agents() {
       <div class="grow"><div class="t" style="text-transform:capitalize">${a.name}</div><div class="s">${esc(a.last ? (a.last.symbol ? a.last.symbol + ": " : "") + a.last.text : role[a.name])}</div></div>
       <div class="r"><span class="pill ${st[0]}">${st[1]}</span><div class="s">${a.decisions_24h} / 24h</div></div></div>`; }).join("")}</div>
   <div class="h">Ask the desk</div><div class="card"><div class="cmd"><input id="cmd" placeholder="status · why SYMBOL · set risk.stop_pct 6" autocapitalize="off" autocorrect="off"><button id="go">Send</button></div><div id="out" class="sub" style="white-space:pre-wrap;margin-top:10px"></div></div>`;
-  const send = async () => { const t = $("#cmd").value.trim(); if (!t) return; try { const r = await post("/api/command", { text: t }); $("#out").textContent = r.text; } catch (e) { $("#out").textContent = e.message; } };
+  const send = async () => { const t = $("#cmd").value.trim(); if (!t) return; try { const r = await post("/api/command", { text: t }); $("#out").textContent = r.text; } catch (e) { if (e.authRejected) return; $("#out").textContent = e.message; } };
   $("#go").onclick = send; $("#cmd").onkeydown = e => { if (e.key === "Enter") send(); };
 }
 
@@ -140,7 +150,7 @@ async function agentSheet(name) {
     }
     html += d.items.length ? `<div class="list">${d.items.map(feedRow).join("")}</div>` : empty("🕊️", "No decisions yet", "This agent hasn't decided anything yet.");
     sheetBody(html);
-  } catch (e) { sheetBody(errorBox(e)); }
+  } catch (e) { if (e.authRejected) return; sheetBody(errorBox(e)); }
 }
 
 function feedRow(i) {
@@ -152,13 +162,13 @@ function feedRow(i) {
 
 async function activity() {
   setTitle("Activity"); const v = $("#view"); v.innerHTML = loading();
-  let d; try { d = await api("/api/activity?limit=100"); } catch (e) { v.innerHTML = errorBox(e); return; }
+  let d; try { d = await api("/api/activity?limit=100"); } catch (e) { if (e.authRejected) return; v.innerHTML = errorBox(e); return; }
   v.innerHTML = d.items.length ? `<div class="list" id="feed">${d.items.map(feedRow).join("")}</div>` : empty("📭", "Nothing yet", "Every decision from every agent lands here.");
 }
 
 async function account() {
   setTitle("Account"); const v = $("#view"); v.innerHTML = loading();
-  let a, s; try { [a, s] = await Promise.all([api("/api/account"), api("/api/settings")]); } catch (e) { v.innerHTML = errorBox(e); return; }
+  let a, s; try { [a, s] = await Promise.all([api("/api/account"), api("/api/settings")]); } catch (e) { if (e.authRejected) return; v.innerHTML = errorBox(e); return; }
   const pushState = !("Notification" in window) ? "Add Desk to your Home Screen to enable push" : Notification.permission === "granted" ? "Enabled on this phone" : "Tap to enable";
   const groups = s.settings, editable = ["scanner", "auditor", "analyst", "executor", "risk", "desk"];
   v.innerHTML = `
@@ -174,13 +184,13 @@ async function account() {
   <div class="h">Settings</div>${editable.map(g => `<div class="list">${Object.entries(groups[g] || {}).filter(([k]) => !["mode", "paper_nights", "paper_since", "layer8_proof", "last_night_closed", "paused", "paused_by"].includes(k) || g !== "desk").map(([k, val]) =>
       `<div class="row" data-set="${g}.${k}" data-val="${esc(JSON.stringify(val))}"><div class="grow"><div class="t" style="font-weight:500">${g}.${esc(k)}</div></div><div class="r num muted">${esc(typeof val === "object" ? JSON.stringify(val) : val)}</div></div>`).join("")}</div>`).join("")}
   <button class="btn danger" id="logout" style="margin:18px 0">Forget access code on this phone</button>`;
-  $("#push").onclick = enablePush; $("#pushtest").onclick = async () => { try { const r = await post("/api/push/test"); toast("Push: " + JSON.stringify(r.result)); } catch (e) { toast(e.message); } };
-  const gl = $("#golive"); if (gl) gl.onclick = async () => { try { await post("/api/mode", { mode: "LIVE", confirm: $("#liveconf").value.trim() }); toast("LIVE on"); account(); } catch (e) { toast(e.message); } };
+  $("#push").onclick = enablePush; $("#pushtest").onclick = async () => { try { const r = await post("/api/push/test"); toast("Push: " + JSON.stringify(r.result)); } catch (e) { if (e.authRejected) return; toast(e.message); } };
+  const gl = $("#golive"); if (gl) gl.onclick = async () => { try { await post("/api/mode", { mode: "LIVE", confirm: $("#liveconf").value.trim() }); toast("LIVE on"); account(); } catch (e) { if (e.authRejected) return; toast(e.message); } };
   const gp = $("#gopaper"); if (gp) gp.onclick = async () => { await post("/api/mode", { mode: "PAPER" }); account(); };
   $("#logout").onclick = () => { localStorage.removeItem(KEY); login(); };
   document.querySelectorAll("[data-set]").forEach(r => r.onclick = async () => {
     const key = r.dataset.set, cur = JSON.parse(r.dataset.val); const nv = prompt(key, typeof cur === "object" ? JSON.stringify(cur) : cur); if (nv == null) return;
-    try { const res = await post("/api/settings", { key, value: nv }); toast(`${key}: ${res.old} → ${res.new}`); account(); } catch (e) { toast(e.message); }
+    try { const res = await post("/api/settings", { key, value: nv }); toast(`${key}: ${res.old} → ${res.new}`); account(); } catch (e) { if (e.authRejected) return; toast(e.message); }
   });
 }
 
@@ -192,7 +202,7 @@ async function enablePush() {
     const raw = atob(k.publicKey.replace(/-/g, "+").replace(/_/g, "/") + "=".repeat((4 - k.publicKey.length % 4) % 4));
     const sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: Uint8Array.from(raw, c => c.charCodeAt(0)) });
     await post("/api/push/subscribe", sub.toJSON()); toast("Push enabled ✔"); account();
-  } catch (e) { toast("Push failed: " + e.message); }
+  } catch (e) { if (e.authRejected) return; toast("Push failed: " + e.message); }
 }
 
 async function coinSheet(mint) {
@@ -211,7 +221,7 @@ async function coinSheet(mint) {
       <div class="sub" style="text-align:center;margin-top:10px">The desk never trades for you — FOMO opens so you can decide.</div>`);
     candleChart("#cc", ch.candles, ch.entry && ch.entry.entry_price);
     document.querySelectorAll("[data-tf]").forEach(b => b.onclick = async () => { document.querySelectorAll("[data-tf]").forEach(x => x.classList.remove("on")); b.classList.add("on"); const r = await api(`/api/chart?tf=${b.dataset.tf}&mint=${encodeURIComponent(mint)}`); candleChart("#cc", r.candles, r.entry && r.entry.entry_price); });
-  } catch (e) { sheetBody(errorBox(e)); }
+  } catch (e) { if (e.authRejected) return; sheetBody(errorBox(e)); }
 }
 
 async function auditSheet(mint) {
@@ -222,7 +232,7 @@ async function auditSheet(mint) {
       <div class="list">${a.layers.map(l => `<div class="layer"><div class="n ${l.status}">${l.n}</div><div class="grow"><div class="t" style="font-weight:600">${esc(l.name)}</div><div class="s ${l.status === "pass" ? "" : "down"}">${esc(l.note)}</div></div><div class="r s num">${l.value == null ? "" : esc(l.value)}${l.limit != null && typeof l.limit === "number" ? " / " + esc(l.limit) : ""}</div></div>`).join("")}</div>
       <a class="btn" href="${esc(a.link)}" target="_blank" rel="noopener noreferrer">Open on FOMO</a>`);
     disc("#disc", a.layers);
-  } catch (e) { sheetBody(errorBox(e)); }
+  } catch (e) { if (e.authRejected) return; sheetBody(errorBox(e)); }
 }
 
 function openSheet(body, title) { const s = $("#sheet"); s.innerHTML = `<div class="bar"><button class="back">‹ Back</button><b class="ttl" style="text-transform:capitalize">${esc(title)}</b><span style="width:50px"></span></div><div class="body">${body}</div>`; s.classList.remove("hidden"); s.querySelector(".back").onclick = () => s.classList.add("hidden"); }
@@ -231,7 +241,7 @@ function sheetBody(html) { $("#sheet .body").innerHTML = html; }
 function login(msg) {
   stopStream(); $("#tabs").classList.add("hidden"); $("#mode-badge").classList.add("hidden"); setTitle("Desk");
   $("#view").innerHTML = `<div class="login"><h1>Grok Desk</h1><div class="sub">${esc(msg || "Paste your access code. On the server run: grok-desk-url")}</div>
-    <input id="tok" placeholder="Access code" autocapitalize="off" autocorrect="off" spellcheck="false"><button class="btn primary" id="tokgo">Unlock</button></div>`;
+    <input id="tok" placeholder="Access code" autocapitalize="off" autocorrect="off" spellcheck="false" autocomplete="off"><button class="btn primary" id="tokgo">Unlock</button></div>`;
   $("#tokgo").onclick = () => { const t = $("#tok").value.trim().replace(/^.*#t=/, ""); if (t.length < 20) { toast("That code looks too short"); return; } localStorage.setItem(KEY, t); $("#tabs").classList.remove("hidden"); go("home"); startStream(); };
 }
 
@@ -242,6 +252,7 @@ async function startStream() {
   stopStream(); const ctl = new AbortController(); streamCtl = ctl;
   try {
     const r = await fetch("/api/stream", { headers: { Authorization: "Bearer " + token() }, signal: ctl.signal });
+    if (r.status === 401) { try { rejectAuth(); } catch (_) {} return; }
     if (!r.ok) throw new Error(r.status); $("#conn").classList.add("on");
     const rd = r.body.getReader(), dec = new TextDecoder(); let buf = "";
     for (;;) { const { value, done } = await rd.read(); if (done) break; buf += dec.decode(value, { stream: true });
