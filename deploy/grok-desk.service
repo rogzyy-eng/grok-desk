@@ -1,0 +1,28 @@
+[Unit]
+Description=Grok FOMO desk (5 agents + API) — never places orders
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=desk
+Group=desk
+WorkingDirectory=/opt/grok-desk
+EnvironmentFile=/etc/grok-desk/desk.env
+Environment=DESK_DATA_DIR=/var/lib/grok-desk
+Environment=DESK_HOST=127.0.0.1
+Environment=DESK_PORT=8787
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/opt/grok-desk/.venv/bin/python /opt/grok-desk/main.py
+Restart=always
+RestartSec=5
+StartLimitIntervalSec=0
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/var/lib/grok-desk
+MemoryMax=600M
+
+[Install]
+WantedBy=multi-user.target

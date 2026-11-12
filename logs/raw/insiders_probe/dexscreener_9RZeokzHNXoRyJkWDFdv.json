@@ -1,0 +1,13 @@
+{
+  "http_status": 200,
+  "pairs": [
+    {
+      "dexId": "pumpswap",
+      "pairAddress": "GoM6pz6Nc2NATJvtR29Xa98GSQmJzt72rJNkEKypRZs8",
+      "pairCreatedAt": 1794071437000,
+      "liquidity_usd": 59389.59,
+      "symbol": "CHILL",
+      "name": "CHILL"
+    }
+  ]
+}

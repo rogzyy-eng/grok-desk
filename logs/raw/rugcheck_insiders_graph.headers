@@ -1,0 +1,11 @@
+HTTP/2 200 
+server: nginx
+date: Wed, 11 Nov 2026 20:13:54 GMT
+content-type: application/json
+content-length: 2
+cache-control: public, max-age=120
+expires: Wed, 11 Nov 2026 20:15:54 UTC
+pragma: public
+x-rate-limit-limit: 15
+x-rate-limit-remaining: 14
+

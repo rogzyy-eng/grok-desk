@@ -1,0 +1,13 @@
+{
+  "http_status": 200,
+  "pairs": [
+    {
+      "dexId": "pumpswap",
+      "pairAddress": "D5YSMfk2Rzjm2SW4d6ZX9ge6jnNfMhpHB6JpF6NDu7XL",
+      "pairCreatedAt": 1794388202000,
+      "liquidity_usd": 5344720.77,
+      "symbol": "woohao",
+      "name": "ni hao dog"
+    }
+  ]
+}

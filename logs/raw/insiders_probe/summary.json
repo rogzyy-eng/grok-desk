@@ -1,0 +1,1327 @@
+{
+  "finished_at": "2026-11-11T23:27:37.650380+03:00",
+  "fresh_mints": [
+    "4jydr1VxLfjCZFgZcm1m24QpFmMwNyuh27CXSCodpump",
+    "AxRYn4qXzzrEfe8xJY76e9FrveX8SuQpFFsTmjZupump",
+    "3DAEY8CK5ScoUT5UP1TUzAAz1xpGx4w3sikSBzF5pump",
+    "632ZCbqv28AoF9ausrd4pGMAE5ccczxAg2Ltzsy4TrWG"
+  ],
+  "records": [
+    {
+      "label": "older",
+      "cohort": "older",
+      "mint": "BLVpn8ofkjnAzpWGaVpspZ5bHTeXDbXFgX4vn3fkpump",
+      "symbol": "woohao",
+      "queried_at_europe_istanbul": "2026-11-11T23:19:29.777383+03:00",
+      "age": "11.16 h",
+      "age_detail": {
+        "seconds": 40167.8,
+        "origin": "2026-11-11T12:10:02+03:00",
+        "origin_source": "pairCreatedAt"
+      },
+      "graph": {
+        "http_status": 200,
+        "elapsed_s": 0.67,
+        "bytes": 4207,
+        "error": null,
+        "shape": "list",
+        "count": 3,
+        "keys": null,
+        "item_type": "dict",
+        "item_keys": [
+          "links",
+          "net_id",
+          "network_type",
+          "nodes",
+          "relatedMint"
+        ],
+        "nonempty": true
+      },
+      "report": {
+        "http_status": 200,
+        "elapsed_s": 0.716,
+        "bytes": 21324,
+        "error": null,
+        "top": {
+          "mint": "BLVpn8ofkjnAzpWGaVpspZ5bHTeXDbXFgX4vn3fkpump",
+          "creator": "g2kai8M6mJQroTG1EGGtP4RQHaqStDgsXGkukLutzo9",
+          "graphInsidersDetected": 20,
+          "insiderNetworks": [
+            {
+              "id": "crisp-plum-meerkat",
+              "size": 5,
+              "type": "transfer",
+              "tokenAmount": 31084816333063,
+              "currentHolding": 26675052239330,
+              "activeAccounts": 5
+            },
+            {
+              "id": "clean-grape-leopard",
+              "size": 4,
+              "type": "transfer",
+              "tokenAmount": 13485780133283,
+              "currentHolding": 13485780133283,
+              "activeAccounts": 4
+            },
+            {
+              "id": "vast-taupe-bison",
+              "size": 11,
+              "type": "transfer",
+              "tokenAmount": 11449722093700,
+              "currentHolding": 11449722093700,
+              "activeAccounts": 11
+            }
+          ],
+          "totalHolders": 2114,
+          "detectedAt": "2026-11-11T08:59:19.698627202Z",
+          "launchpad.name": "Pump.Fun",
+          "tokenMeta.symbol": "woohao",
+          "tokenMeta.name": "ni hao dog",
+          "markets": [
+            {
+              "pubkey": "D5YSMfk2Rzjm2SW4d6ZX9ge6jnNfMhpHB6JpF6NDu7XL",
+              "marketType": "pump_fun_amm"
+            },
+            {
+              "pubkey": "CY2qJZLewUqQ8p5o8kvk595GRPsxB3RHUPf4XN9SSiSN",
+              "marketType": "meteoraDlmm"
+            },
+            {
+              "pubkey": "FmWeaiYJkaktPAzS52VXBfJcAoHFoCqyUY45PNZuQJrr",
+              "marketType": "orca"
+            },
+            {
+              "pubkey": "3H17Xf3uxRHC6vSiR7hrg4wtDcyKU5vj2x74nAQJKj3d",
+              "marketType": "meteora_damm_v2"
+            }
+          ]
+        },
+        "insider_related_keys": [
+          {
+            "path": "topHolders[].insider",
+            "key": "insider",
+            "value_type": "list_items",
+            "sample": {
+              "items": 20,
+              "true": 0,
+              "false": 20,
+              "null": 0,
+              "other_preview": []
+            }
+          },
+          {
+            "path": "topHolders[0].insider",
+            "key": "insider",
+            "value_type": "bool",
+            "sample": false
+          },
+          {
+            "path": "graphInsidersDetected",
+            "key": "graphInsidersDetected",
+            "value_type": "int",
+            "sample": 20
+          },
+          {
+            "path": "insiderNetworks",
+            "key": "insiderNetworks",
+            "value_type": "list",
+            "sample": {
+              "len": 3,
+              "first": {
+                "id": "crisp-plum-meerkat",
+                "size": 5,
+                "type": "transfer",
+                "tokenAmount": 31084816333063,
+                "currentHolding": 26675052239330,
+                "activeAccounts": 5
+              }
+            }
+          }
+        ]
+      },
+      "saved_nonempty_sample": "/workspace/desk/logs/raw/rugcheck_insiders_graph_BLVpn8ofkjnAzpWGaVpspZ5bHTeXDbXFgX4vn3fkpump.json"
+    },
+    {
+      "label": "older",
+      "cohort": "older",
+      "mint": "8yLBuP74RnFmjSRS8BGFebvyoTo8uiEjPB71h3Zgpump",
+      "symbol": "NIHAO",
+      "queried_at_europe_istanbul": "2026-11-11T23:19:31.566511+03:00",
+      "age": "20.34 h",
+      "age_detail": {
+        "seconds": 73215.6,
+        "origin": "2026-11-11T02:59:16+03:00",
+        "origin_source": "pairCreatedAt"
+      },
+      "graph": {
+        "http_status": 200,
+        "elapsed_s": 0.675,
+        "bytes": 4883,
+        "error": null,
+        "shape": "list",
+        "count": 6,
+        "keys": null,
+        "item_type": "dict",
+        "item_keys": [
+          "links",
+          "net_id",
+          "network_type",
+          "nodes",
+          "relatedMint"
+        ],
+        "nonempty": true
+      },
+      "report": {
+        "http_status": 200,
+        "elapsed_s": 0.966,
+        "bytes": 12498,
+        "error": null,
+        "top": {
+          "mint": "8yLBuP74RnFmjSRS8BGFebvyoTo8uiEjPB71h3Zgpump",
+          "creator": "FU4TY2ngXtNxgJswspp893H2DAAL7JUvaytoWqtWsyCA",
+          "graphInsidersDetected": 24,
+          "insiderNetworks": [
+            {
+              "id": "ripe-apricot-mink",
+              "size": 4,
+              "type": "transfer",
+              "tokenAmount": 24229327780122,
+              "currentHolding": 24229327780122,
+              "activeAccounts": 4
+            },
+            {
+              "id": "clean-flax-termite",
+              "size": 4,
+              "type": "transfer",
+              "tokenAmount": 23840906289145,
+              "currentHolding": 23840906289145,
+              "activeAccounts": 4
+            },
+            {
+              "id": "young-raspberry-okapi",
+              "size": 4,
+              "type": "transfer",
+              "tokenAmount": 23610328752156,
+              "currentHolding": 23610328752156,
+              "activeAccounts": 4
+            },
+            {
+              "id": "obtuse-ochre-gecko",
+              "size": 4,
+              "type": "transfer",
+              "tokenAmount": 23506117821129,
+              "currentHolding": 23506117821129,
+              "activeAccounts": 4
+            },
+            {
+              "id": "fast-white-bison",
+              "size": 4,
+              "type": "transfer",
+              "tokenAmount": 23425270028640,
+              "currentHolding": 23425270028640,
+              "activeAccounts": 4
+            },
+            {
+              "id": "kind-amber-octopus",
+              "size": 4,
+              "type": "transfer",
+              "tokenAmount": 11342681768619,
+              "currentHolding": 11342681768619,
+              "activeAccounts": 4
+            }
+          ],
+          "totalHolders": 3994,
+          "detectedAt": "2026-11-10T23:59:16.8501163Z",
+          "launchpad.name": "Pump.Fun",
+          "tokenMeta.symbol": "NIHAO",
+          "tokenMeta.name": "nihao cat",
+          "markets": [
+            {
+              "pubkey": "4rsLuj8sBFFMwM4AK6p4R5RbZ7y2m9CGrefxVb29JbgN",
+              "marketType": "pump_fun_amm"
+            },
+            {
+              "pubkey": "3VhV8NT7u7V4fp9PoVRwDncdELah3VY7A9eZPE6M4s2g",
+              "marketType": "meteora_damm_v2"
+            }
+          ]
+        },
+        "insider_related_keys": [
+          {
+            "path": "topHolders[].insider",
+            "key": "insider",
+            "value_type": "list_items",
+            "sample": {
+              "items": 20,
+              "true": 0,
+              "false": 20,
+              "null": 0,
+              "other_preview": []
+            }
+          },
+          {
+            "path": "topHolders[0].insider",
+            "key": "insider",
+            "value_type": "bool",
+            "sample": false
+          },
+          {
+            "path": "graphInsidersDetected",
+            "key": "graphInsidersDetected",
+            "value_type": "int",
+            "sample": 24
+          },
+          {
+            "path": "insiderNetworks",
+            "key": "insiderNetworks",
+            "value_type": "list",
+            "sample": {
+              "len": 6,
+              "first": {
+                "id": "ripe-apricot-mink",
+                "size": 4,
+                "type": "transfer",
+                "tokenAmount": 24229327780122,
+                "currentHolding": 24229327780122,
+                "activeAccounts": 4
+              }
+            }
+          }
+        ]
+      },
+      "saved_nonempty_sample": "/workspace/desk/logs/raw/rugcheck_insiders_graph_8yLBuP74RnFmjSRS8BGFebvyoTo8uiEjPB71h3Zgpump.json"
+    },
+    {
+      "label": "older",
+      "cohort": "older",
+      "mint": "9RZeokzHNXoRyJkWDFdvcQTAzUhKpXm7RrqkUM3Fpump",
+      "symbol": "CHILL",
+      "queried_at_europe_istanbul": "2026-11-11T23:19:33.610503+03:00",
+      "age": "4.13 d",
+      "age_detail": {
+        "seconds": 356936.6,
+        "origin": "2026-11-07T20:10:37+03:00",
+        "origin_source": "pairCreatedAt"
+      },
+      "graph": {
+        "http_status": 200,
+        "elapsed_s": 0.933,
+        "bytes": 8213,
+        "error": null,
+        "shape": "list",
+        "count": 2,
+        "keys": null,
+        "item_type": "dict",
+        "item_keys": [
+          "links",
+          "net_id",
+          "network_type",
+          "nodes",
+          "relatedMint"
+        ],
+        "nonempty": true
+      },
+      "report": {
+        "http_status": 200,
+        "elapsed_s": 0.9,
+        "bytes": 11590,
+        "error": null,
+        "top": {
+          "mint": "9RZeokzHNXoRyJkWDFdvcQTAzUhKpXm7RrqkUM3Fpump",
+          "creator": "Di2XEycxmwkqt4hMFqhxmWiLJTdmrbK52niTH2MU2LpW",
+          "graphInsidersDetected": 37,
+          "insiderNetworks": [
+            {
+              "id": "knotty-scarlet-donkey",
+              "size": 30,
+              "type": "transfer",
+              "tokenAmount": 1000952634474044,
+              "currentHolding": 910952634474044,
+              "activeAccounts": 30
+            },
+            {
+              "id": "dirty-silver-lobster",
+              "size": 7,
+              "type": "transfer",
+              "tokenAmount": 14500000000000,
+              "currentHolding": 10000000000000,
+              "activeAccounts": 7
+            }
+          ],
+          "totalHolders": 1208,
+          "detectedAt": "2026-11-06T17:19:31.619109566Z",
+          "launchpad.name": "Pump.Fun",
+          "tokenMeta.symbol": "CHILL",
+          "tokenMeta.name": "CHILL",
+          "markets": [
+            {
+              "pubkey": "GoM6pz6Nc2NATJvtR29Xa98GSQmJzt72rJNkEKypRZs8",
+              "marketType": "pump_fun_amm"
+            },
+            {
+              "pubkey": "2i1KArBBc7DH7dpaRWA9G79BAYr6xrAMVxBjzhm3cRVi",
+              "marketType": "orca"
+            }
+          ]
+        },
+        "insider_related_keys": [
+          {
+            "path": "topHolders[].insider",
+            "key": "insider",
+            "value_type": "list_items",
+            "sample": {
+              "items": 20,
+              "true": 0,
+              "false": 20,
+              "null": 0,
+              "other_preview": []
+            }
+          },
+          {
+            "path": "topHolders[0].insider",
+            "key": "insider",
+            "value_type": "bool",
+            "sample": false
+          },
+          {
+            "path": "graphInsidersDetected",
+            "key": "graphInsidersDetected",
+            "value_type": "int",
+            "sample": 37
+          },
+          {
+            "path": "insiderNetworks",
+            "key": "insiderNetworks",
+            "value_type": "list",
+            "sample": {
+              "len": 2,
+              "first": {
+                "id": "knotty-scarlet-donkey",
+                "size": 30,
+                "type": "transfer",
+                "tokenAmount": 1000952634474044,
+                "currentHolding": 910952634474044,
+                "activeAccounts": 30
+              }
+            }
+          }
+        ]
+      },
+      "saved_nonempty_sample": "/workspace/desk/logs/raw/rugcheck_insiders_graph_9RZeokzHNXoRyJkWDFdvcQTAzUhKpXm7RrqkUM3Fpump.json"
+    },
+    {
+      "label": "older",
+      "cohort": "older",
+      "mint": "DtcicPCKTKeAh7TDEzTym3hXeoHAoMiBdYJhMYxZpump",
+      "symbol": "CBUCKS",
+      "queried_at_europe_istanbul": "2026-11-11T23:19:35.845846+03:00",
+      "age": "36.08 d",
+      "age_detail": {
+        "seconds": 3116982.8,
+        "origin": "2026-10-06T21:29:53+03:00",
+        "origin_source": "pairCreatedAt"
+      },
+      "graph": {
+        "http_status": 200,
+        "elapsed_s": 0.761,
+        "bytes": 2,
+        "error": null,
+        "shape": "list",
+        "count": 0,
+        "keys": null,
+        "item_type": null,
+        "item_keys": null,
+        "nonempty": false
+      },
+      "report": {
+        "http_status": 200,
+        "elapsed_s": 0.767,
+        "bytes": 18816,
+        "error": null,
+        "top": {
+          "mint": "DtcicPCKTKeAh7TDEzTym3hXeoHAoMiBdYJhMYxZpump",
+          "creator": "3WhAzuGAjnNCJz3kRMog71WGipQvXb2CzaQvjS7mkkXF",
+          "graphInsidersDetected": 0,
+          "insiderNetworks": null,
+          "totalHolders": 4823,
+          "detectedAt": "2026-10-06T18:29:44.467389327Z",
+          "launchpad.name": "Pump.Fun",
+          "tokenMeta.symbol": "CBUCKS",
+          "tokenMeta.name": "Cartoon Money",
+          "markets": [
+            {
+              "pubkey": "B4Cp45PGifVM5FAXfh6AeV8QZ3eUNQnqGBw7KuC7MHnB",
+              "marketType": "pump_fun_amm"
+            },
+            {
+              "pubkey": "BxqFa97tVkqaraFfiVqgh1WXX5BfCiGjM2sfHHtHfQ9t",
+              "marketType": "raydium_clmm"
+            },
+            {
+              "pubkey": "2CVssC8i34s4iBXcN7jjKQLHnrfjZckss4mExn5KxFRS",
+              "marketType": "raydium_clmm"
+            },
+            {
+              "pubkey": "N3WYHLK6u893zED7AP4b4wmP6EXnxygHiee6tyhNHjX",
+              "marketType": "raydium_clmm"
+            },
+            {
+              "pubkey": "7V25dGjVAd8cq5DTvKNgL5apvJ9W8gPxgHuJUoJhizrU",
+              "marketType": "meteoraDlmm"
+            },
+            {
+              "pubkey": "ULgYHBGqgB1hbAjbvPD7G73yMasYFkC8VXu4AA3rm97",
+              "marketType": "orca"
+            }
+          ]
+        },
+        "insider_related_keys": [
+          {
+            "path": "topHolders[].insider",
+            "key": "insider",
+            "value_type": "list_items",
+            "sample": {
+              "items": 20,
+              "true": 0,
+              "false": 20,
+              "null": 0,
+              "other_preview": []
+            }
+          },
+          {
+            "path": "topHolders[0].insider",
+            "key": "insider",
+            "value_type": "bool",
+            "sample": false
+          },
+          {
+            "path": "graphInsidersDetected",
+            "key": "graphInsidersDetected",
+            "value_type": "int",
+            "sample": 0
+          },
+          {
+            "path": "insiderNetworks",
+            "key": "insiderNetworks",
+            "value_type": "NoneType",
+            "sample": null
+          }
+        ]
+      }
+    },
+    {
+      "label": "cybron_now",
+      "cohort": "cybron_repeat",
+      "mint": "A3qwGJEEc6Vzq17gWj3T97J1ArR3fHD5wgNmR2pkpump",
+      "symbol": "CYBRON",
+      "queried_at_europe_istanbul": "2026-11-11T23:19:37.776702+03:00",
+      "age": "5.9 min",
+      "age_detail": {
+        "seconds": 355.9,
+        "origin": "2026-11-11T23:13:41.891000+03:00",
+        "origin_source": "migration"
+      },
+      "graph": {
+        "http_status": 200,
+        "elapsed_s": 0.935,
+        "bytes": 2,
+        "error": null,
+        "shape": "list",
+        "count": 0,
+        "keys": null,
+        "item_type": null,
+        "item_keys": null,
+        "nonempty": false
+      },
+      "report": {
+        "http_status": 200,
+        "elapsed_s": 0.889,
+        "bytes": 11569,
+        "error": null,
+        "top": {
+          "mint": "A3qwGJEEc6Vzq17gWj3T97J1ArR3fHD5wgNmR2pkpump",
+          "creator": "GAHEsVuqnfv242J96FimQiobCYpZb1suDEALYRHqmPmF",
+          "graphInsidersDetected": 0,
+          "insiderNetworks": null,
+          "totalHolders": 490,
+          "detectedAt": "2026-11-11T00:39:16.298141399Z",
+          "launchpad.name": "Pump.Fun",
+          "tokenMeta.symbol": "CYBRON",
+          "tokenMeta.name": "CYBRON",
+          "markets": [
+            {
+              "pubkey": "DUxG3Y9BAe6kvz2kkXYtHwRpc5jDj2pSh7xk9bYyhwwD",
+              "marketType": "pump_fun_amm"
+            },
+            {
+              "pubkey": "GEoY7P6fKCMRCjLubcfAsipNXxF8JqZwZcmSLVBBnGjR",
+              "marketType": "meteora_damm_v2"
+            }
+          ]
+        },
+        "insider_related_keys": [
+          {
+            "path": "topHolders[].insider",
+            "key": "insider",
+            "value_type": "list_items",
+            "sample": {
+              "items": 20,
+              "true": 0,
+              "false": 20,
+              "null": 0,
+              "other_preview": []
+            }
+          },
+          {
+            "path": "topHolders[0].insider",
+            "key": "insider",
+            "value_type": "bool",
+            "sample": false
+          },
+          {
+            "path": "graphInsidersDetected",
+            "key": "graphInsidersDetected",
+            "value_type": "int",
+            "sample": 0
+          },
+          {
+            "path": "insiderNetworks",
+            "key": "insiderNetworks",
+            "value_type": "NoneType",
+            "sample": null
+          }
+        ]
+      }
+    },
+    {
+      "label": "fresh_t1min",
+      "cohort": "fresh",
+      "mint": "4jydr1VxLfjCZFgZcm1m24QpFmMwNyuh27CXSCodpump",
+      "symbol": "BUD",
+      "queried_at_europe_istanbul": "2026-11-11T23:19:39.604162+03:00",
+      "age": "71s",
+      "age_detail": {
+        "seconds": 71.1,
+        "origin": "2026-11-11T23:18:28.456000+03:00",
+        "origin_source": "migration"
+      },
+      "graph": {
+        "http_status": 200,
+        "elapsed_s": 0.622,
+        "bytes": 2,
+        "error": null,
+        "shape": "list",
+        "count": 0,
+        "keys": null,
+        "item_type": null,
+        "item_keys": null,
+        "nonempty": false
+      },
+      "report": {
+        "http_status": 200,
+        "elapsed_s": 0.637,
+        "bytes": 15865,
+        "error": null,
+        "top": {
+          "mint": "4jydr1VxLfjCZFgZcm1m24QpFmMwNyuh27CXSCodpump",
+          "creator": "Er15bSCBaPLq8sHvmudUsQ5N3XVc6VKNSpppJmVjYrZo",
+          "graphInsidersDetected": 0,
+          "insiderNetworks": null,
+          "totalHolders": 26,
+          "detectedAt": "2026-11-11T20:05:59.431946778Z",
+          "launchpad.name": "Pump.Fun",
+          "tokenMeta.symbol": "BUD",
+          "tokenMeta.name": "MoonBud",
+          "markets": [
+            {
+              "pubkey": "81iTnwwX8EgqMv43RNY96zkSb9hLehEU8rhzgieFZQPd",
+              "marketType": "pump_fun_amm"
+            }
+          ]
+        },
+        "insider_related_keys": [
+          {
+            "path": "topHolders[].insider",
+            "key": "insider",
+            "value_type": "list_items",
+            "sample": {
+              "items": 20,
+              "true": 0,
+              "false": 20,
+              "null": 0,
+              "other_preview": []
+            }
+          },
+          {
+            "path": "topHolders[0].insider",
+            "key": "insider",
+            "value_type": "bool",
+            "sample": false
+          },
+          {
+            "path": "graphInsidersDetected",
+            "key": "graphInsidersDetected",
+            "value_type": "int",
+            "sample": 0
+          },
+          {
+            "path": "insiderNetworks",
+            "key": "insiderNetworks",
+            "value_type": "NoneType",
+            "sample": null
+          }
+        ]
+      }
+    },
+    {
+      "label": "fresh_t1min",
+      "cohort": "fresh",
+      "mint": "AxRYn4qXzzrEfe8xJY76e9FrveX8SuQpFFsTmjZupump",
+      "symbol": "ANUMA",
+      "queried_at_europe_istanbul": "2026-11-11T23:20:38.879309+03:00",
+      "age": "60s",
+      "age_detail": {
+        "seconds": 60.4,
+        "origin": "2026-11-11T23:19:38.430000+03:00",
+        "origin_source": "migration"
+      },
+      "graph": {
+        "http_status": 200,
+        "elapsed_s": 0.926,
+        "bytes": 2,
+        "error": null,
+        "shape": "list",
+        "count": 0,
+        "keys": null,
+        "item_type": null,
+        "item_keys": null,
+        "nonempty": false
+      },
+      "report": {
+        "http_status": 200,
+        "elapsed_s": 0.822,
+        "bytes": 5246,
+        "error": null,
+        "top": {
+          "mint": "AxRYn4qXzzrEfe8xJY76e9FrveX8SuQpFFsTmjZupump",
+          "creator": "GcvdmnV7nvJsDxjhzCFVj1BYojmbj5RkimNUQkbWs2t6",
+          "graphInsidersDetected": 0,
+          "insiderNetworks": null,
+          "totalHolders": 10,
+          "detectedAt": "2026-11-11T20:17:18.549617647Z",
+          "launchpad.name": "Pump.Fun",
+          "tokenMeta.symbol": "ANUMA",
+          "tokenMeta.name": "Anuma AI",
+          "markets": []
+        },
+        "insider_related_keys": [
+          {
+            "path": "topHolders[].insider",
+            "key": "insider",
+            "value_type": "list_items",
+            "sample": {
+              "items": 10,
+              "true": 0,
+              "false": 10,
+              "null": 0,
+              "other_preview": []
+            }
+          },
+          {
+            "path": "topHolders[0].insider",
+            "key": "insider",
+            "value_type": "bool",
+            "sample": false
+          },
+          {
+            "path": "graphInsidersDetected",
+            "key": "graphInsidersDetected",
+            "value_type": "int",
+            "sample": 0
+          },
+          {
+            "path": "insiderNetworks",
+            "key": "insiderNetworks",
+            "value_type": "NoneType",
+            "sample": null
+          }
+        ]
+      }
+    },
+    {
+      "label": "fresh_t1min",
+      "cohort": "fresh",
+      "mint": "3DAEY8CK5ScoUT5UP1TUzAAz1xpGx4w3sikSBzF5pump",
+      "symbol": "JUSS",
+      "queried_at_europe_istanbul": "2026-11-11T23:21:16.637606+03:00",
+      "age": "62s",
+      "age_detail": {
+        "seconds": 61.7,
+        "origin": "2026-11-11T23:20:14.969000+03:00",
+        "origin_source": "migration"
+      },
+      "graph": {
+        "http_status": 200,
+        "elapsed_s": 0.678,
+        "bytes": 2,
+        "error": null,
+        "shape": "list",
+        "count": 0,
+        "keys": null,
+        "item_type": null,
+        "item_keys": null,
+        "nonempty": false
+      },
+      "report": {
+        "http_status": 200,
+        "elapsed_s": 0.917,
+        "bytes": 16264,
+        "error": null,
+        "top": {
+          "mint": "3DAEY8CK5ScoUT5UP1TUzAAz1xpGx4w3sikSBzF5pump",
+          "creator": "DcTQjBVaCaApAXrf6PBwvMTBkWVzi2MCiR2WKUedQLNk",
+          "graphInsidersDetected": 0,
+          "insiderNetworks": null,
+          "totalHolders": 31,
+          "detectedAt": "2026-11-11T20:17:50.843688228Z",
+          "launchpad.name": "Pump.Fun",
+          "tokenMeta.symbol": "JUSS",
+          "tokenMeta.name": "JUSSYCOIN",
+          "markets": [
+            {
+              "pubkey": "4T9buWowaevAchjAmM8xpcuqKawH2YGyFERsVwVb6uzf",
+              "marketType": "pump_fun_amm"
+            }
+          ]
+        },
+        "insider_related_keys": [
+          {
+            "path": "topHolders[].insider",
+            "key": "insider",
+            "value_type": "list_items",
+            "sample": {
+              "items": 20,
+              "true": 0,
+              "false": 20,
+              "null": 0,
+              "other_preview": []
+            }
+          },
+          {
+            "path": "topHolders[0].insider",
+            "key": "insider",
+            "value_type": "bool",
+            "sample": false
+          },
+          {
+            "path": "graphInsidersDetected",
+            "key": "graphInsidersDetected",
+            "value_type": "int",
+            "sample": 0
+          },
+          {
+            "path": "insiderNetworks",
+            "key": "insiderNetworks",
+            "value_type": "NoneType",
+            "sample": null
+          }
+        ]
+      }
+    },
+    {
+      "label": "fresh_t1min",
+      "cohort": "fresh",
+      "mint": "632ZCbqv28AoF9ausrd4pGMAE5ccczxAg2Ltzsy4TrWG",
+      "symbol": "Teeny",
+      "queried_at_europe_istanbul": "2026-11-11T23:21:36.237809+03:00",
+      "age": "60s",
+      "age_detail": {
+        "seconds": 60.5,
+        "origin": "2026-11-11T23:20:35.777000+03:00",
+        "origin_source": "migration"
+      },
+      "graph": {
+        "http_status": 200,
+        "elapsed_s": 0.833,
+        "bytes": 2718,
+        "error": null,
+        "shape": "list",
+        "count": 3,
+        "keys": null,
+        "item_type": "dict",
+        "item_keys": [
+          "links",
+          "net_id",
+          "network_type",
+          "nodes",
+          "relatedMint"
+        ],
+        "nonempty": true
+      },
+      "report": {
+        "http_status": 200,
+        "elapsed_s": 0.816,
+        "bytes": 12081,
+        "error": null,
+        "top": {
+          "mint": "632ZCbqv28AoF9ausrd4pGMAE5ccczxAg2Ltzsy4TrWG",
+          "creator": "CmgPPkmftRfteWeH3RXaZhxcUEByfnm4kA17atWwg1XZ",
+          "graphInsidersDetected": 13,
+          "insiderNetworks": [
+            {
+              "id": "fancy-cobalt-hedgehog",
+              "size": 4,
+              "type": "transfer",
+              "tokenAmount": 43721593766039,
+              "currentHolding": 43721593766039,
+              "activeAccounts": 4
+            },
+            {
+              "id": "puny-khaki-rhino",
+              "size": 4,
+              "type": "transfer",
+              "tokenAmount": 41523534099818,
+              "currentHolding": 41523534099818,
+              "activeAccounts": 4
+            },
+            {
+              "id": "smooth-plum-fly",
+              "size": 5,
+              "type": "transfer",
+              "tokenAmount": 33386876959325,
+              "currentHolding": 14679977474290,
+              "activeAccounts": 5
+            }
+          ],
+          "totalHolders": 493,
+          "detectedAt": "2026-11-11T20:16:17.361233299Z",
+          "launchpad.name": "Pump.Fun",
+          "tokenMeta.symbol": "Teeny",
+          "tokenMeta.name": "Teenydroid",
+          "markets": [
+            {
+              "pubkey": "BEUbx7K1fMCE7SJrLHZFmYqRTDfTZW4HDbocndrQjX5k",
+              "marketType": "pump_fun_amm"
+            },
+            {
+              "pubkey": "AzaPHywtYJZA8SpkqBbKYMW6wUMkfyvYneWipkgy8Wxc",
+              "marketType": "meteora_damm_v2"
+            }
+          ]
+        },
+        "insider_related_keys": [
+          {
+            "path": "topHolders[].insider",
+            "key": "insider",
+            "value_type": "list_items",
+            "sample": {
+              "items": 20,
+              "true": 0,
+              "false": 20,
+              "null": 0,
+              "other_preview": []
+            }
+          },
+          {
+            "path": "topHolders[0].insider",
+            "key": "insider",
+            "value_type": "bool",
+            "sample": false
+          },
+          {
+            "path": "graphInsidersDetected",
+            "key": "graphInsidersDetected",
+            "value_type": "int",
+            "sample": 13
+          },
+          {
+            "path": "insiderNetworks",
+            "key": "insiderNetworks",
+            "value_type": "list",
+            "sample": {
+              "len": 3,
+              "first": {
+                "id": "fancy-cobalt-hedgehog",
+                "size": 4,
+                "type": "transfer",
+                "tokenAmount": 43721593766039,
+                "currentHolding": 43721593766039,
+                "activeAccounts": 4
+              }
+            }
+          }
+        ]
+      },
+      "saved_nonempty_sample": "/workspace/desk/logs/raw/rugcheck_insiders_graph_632ZCbqv28AoF9ausrd4pGMAE5ccczxAg2Ltzsy4TrWG.json"
+    },
+    {
+      "label": "fresh_t7min",
+      "cohort": "fresh",
+      "mint": "4jydr1VxLfjCZFgZcm1m24QpFmMwNyuh27CXSCodpump",
+      "symbol": "BUD",
+      "queried_at_europe_istanbul": "2026-11-11T23:25:29.942141+03:00",
+      "age": "7.0 min",
+      "age_detail": {
+        "seconds": 421.5,
+        "origin": "2026-11-11T23:18:28.456000+03:00",
+        "origin_source": "migration"
+      },
+      "graph": {
+        "http_status": 200,
+        "elapsed_s": 0.79,
+        "bytes": 2,
+        "error": null,
+        "shape": "list",
+        "count": 0,
+        "keys": null,
+        "item_type": null,
+        "item_keys": null,
+        "nonempty": false
+      },
+      "report": {
+        "http_status": 200,
+        "elapsed_s": 0.72,
+        "bytes": 15860,
+        "error": null,
+        "top": {
+          "mint": "4jydr1VxLfjCZFgZcm1m24QpFmMwNyuh27CXSCodpump",
+          "creator": "Er15bSCBaPLq8sHvmudUsQ5N3XVc6VKNSpppJmVjYrZo",
+          "graphInsidersDetected": 0,
+          "insiderNetworks": null,
+          "totalHolders": 24,
+          "detectedAt": "2026-11-11T20:05:59.431946778Z",
+          "launchpad.name": "Pump.Fun",
+          "tokenMeta.symbol": "BUD",
+          "tokenMeta.name": "MoonBud",
+          "markets": [
+            {
+              "pubkey": "81iTnwwX8EgqMv43RNY96zkSb9hLehEU8rhzgieFZQPd",
+              "marketType": "pump_fun_amm"
+            }
+          ]
+        },
+        "insider_related_keys": [
+          {
+            "path": "topHolders[].insider",
+            "key": "insider",
+            "value_type": "list_items",
+            "sample": {
+              "items": 20,
+              "true": 0,
+              "false": 20,
+              "null": 0,
+              "other_preview": []
+            }
+          },
+          {
+            "path": "topHolders[0].insider",
+            "key": "insider",
+            "value_type": "bool",
+            "sample": false
+          },
+          {
+            "path": "graphInsidersDetected",
+            "key": "graphInsidersDetected",
+            "value_type": "int",
+            "sample": 0
+          },
+          {
+            "path": "insiderNetworks",
+            "key": "insiderNetworks",
+            "value_type": "NoneType",
+            "sample": null
+          }
+        ]
+      }
+    },
+    {
+      "label": "fresh_t7min",
+      "cohort": "fresh",
+      "mint": "AxRYn4qXzzrEfe8xJY76e9FrveX8SuQpFFsTmjZupump",
+      "symbol": "ANUMA",
+      "queried_at_europe_istanbul": "2026-11-11T23:26:39.470165+03:00",
+      "age": "7.0 min",
+      "age_detail": {
+        "seconds": 421.0,
+        "origin": "2026-11-11T23:19:38.430000+03:00",
+        "origin_source": "migration"
+      },
+      "graph": {
+        "http_status": 200,
+        "elapsed_s": 0.678,
+        "bytes": 2,
+        "error": null,
+        "shape": "list",
+        "count": 0,
+        "keys": null,
+        "item_type": null,
+        "item_keys": null,
+        "nonempty": false
+      },
+      "report": {
+        "http_status": 200,
+        "elapsed_s": 0.635,
+        "bytes": 5374,
+        "error": null,
+        "top": {
+          "mint": "AxRYn4qXzzrEfe8xJY76e9FrveX8SuQpFFsTmjZupump",
+          "creator": "GcvdmnV7nvJsDxjhzCFVj1BYojmbj5RkimNUQkbWs2t6",
+          "graphInsidersDetected": 0,
+          "insiderNetworks": null,
+          "totalHolders": 12,
+          "detectedAt": "2026-11-11T20:17:18.549617647Z",
+          "launchpad.name": "Pump.Fun",
+          "tokenMeta.symbol": "ANUMA",
+          "tokenMeta.name": "Anuma AI",
+          "markets": []
+        },
+        "insider_related_keys": [
+          {
+            "path": "topHolders[].insider",
+            "key": "insider",
+            "value_type": "list_items",
+            "sample": {
+              "items": 12,
+              "true": 0,
+              "false": 12,
+              "null": 0,
+              "other_preview": []
+            }
+          },
+          {
+            "path": "topHolders[0].insider",
+            "key": "insider",
+            "value_type": "bool",
+            "sample": false
+          },
+          {
+            "path": "graphInsidersDetected",
+            "key": "graphInsidersDetected",
+            "value_type": "int",
+            "sample": 0
+          },
+          {
+            "path": "insiderNetworks",
+            "key": "insiderNetworks",
+            "value_type": "NoneType",
+            "sample": null
+          }
+        ]
+      }
+    },
+    {
+      "label": "fresh_t7min",
+      "cohort": "fresh",
+      "mint": "3DAEY8CK5ScoUT5UP1TUzAAz1xpGx4w3sikSBzF5pump",
+      "symbol": "JUSS",
+      "queried_at_europe_istanbul": "2026-11-11T23:27:16.793402+03:00",
+      "age": "7.0 min",
+      "age_detail": {
+        "seconds": 421.8,
+        "origin": "2026-11-11T23:20:14.969000+03:00",
+        "origin_source": "migration"
+      },
+      "graph": {
+        "http_status": 200,
+        "elapsed_s": 0.641,
+        "bytes": 2,
+        "error": null,
+        "shape": "list",
+        "count": 0,
+        "keys": null,
+        "item_type": null,
+        "item_keys": null,
+        "nonempty": false
+      },
+      "report": {
+        "http_status": 200,
+        "elapsed_s": 0.799,
+        "bytes": 16362,
+        "error": null,
+        "top": {
+          "mint": "3DAEY8CK5ScoUT5UP1TUzAAz1xpGx4w3sikSBzF5pump",
+          "creator": "DcTQjBVaCaApAXrf6PBwvMTBkWVzi2MCiR2WKUedQLNk",
+          "graphInsidersDetected": 0,
+          "insiderNetworks": null,
+          "totalHolders": 34,
+          "detectedAt": "2026-11-11T20:17:50.843688228Z",
+          "launchpad.name": "Pump.Fun",
+          "tokenMeta.symbol": "JUSS",
+          "tokenMeta.name": "JUSSYCOIN",
+          "markets": [
+            {
+              "pubkey": "4T9buWowaevAchjAmM8xpcuqKawH2YGyFERsVwVb6uzf",
+              "marketType": "pump_fun_amm"
+            }
+          ]
+        },
+        "insider_related_keys": [
+          {
+            "path": "topHolders[].insider",
+            "key": "insider",
+            "value_type": "list_items",
+            "sample": {
+              "items": 20,
+              "true": 0,
+              "false": 20,
+              "null": 0,
+              "other_preview": []
+            }
+          },
+          {
+            "path": "topHolders[0].insider",
+            "key": "insider",
+            "value_type": "bool",
+            "sample": false
+          },
+          {
+            "path": "graphInsidersDetected",
+            "key": "graphInsidersDetected",
+            "value_type": "int",
+            "sample": 0
+          },
+          {
+            "path": "insiderNetworks",
+            "key": "insiderNetworks",
+            "value_type": "NoneType",
+            "sample": null
+          }
+        ]
+      }
+    },
+    {
+      "label": "fresh_t7min",
+      "cohort": "fresh",
+      "mint": "632ZCbqv28AoF9ausrd4pGMAE5ccczxAg2Ltzsy4TrWG",
+      "symbol": "Teeny",
+      "queried_at_europe_istanbul": "2026-11-11T23:27:36.239205+03:00",
+      "age": "7.0 min",
+      "age_detail": {
+        "seconds": 420.5,
+        "origin": "2026-11-11T23:20:35.777000+03:00",
+        "origin_source": "migration"
+      },
+      "graph": {
+        "http_status": 200,
+        "elapsed_s": 0.678,
+        "bytes": 3555,
+        "error": null,
+        "shape": "list",
+        "count": 4,
+        "keys": null,
+        "item_type": "dict",
+        "item_keys": [
+          "links",
+          "net_id",
+          "network_type",
+          "nodes",
+          "relatedMint"
+        ],
+        "nonempty": true
+      },
+      "report": {
+        "http_status": 200,
+        "elapsed_s": 0.732,
+        "bytes": 12344,
+        "error": null,
+        "top": {
+          "mint": "632ZCbqv28AoF9ausrd4pGMAE5ccczxAg2Ltzsy4TrWG",
+          "creator": "CmgPPkmftRfteWeH3RXaZhxcUEByfnm4kA17atWwg1XZ",
+          "graphInsidersDetected": 17,
+          "insiderNetworks": [
+            {
+              "id": "fancy-cobalt-hedgehog",
+              "size": 4,
+              "type": "transfer",
+              "tokenAmount": 43721593766039,
+              "currentHolding": 43721593766039,
+              "activeAccounts": 4
+            },
+            {
+              "id": "puny-khaki-rhino",
+              "size": 4,
+              "type": "transfer",
+              "tokenAmount": 41523534099818,
+              "currentHolding": 41523534099818,
+              "activeAccounts": 4
+            },
+            {
+              "id": "smooth-plum-fly",
+              "size": 5,
+              "type": "transfer",
+              "tokenAmount": 33386876959325,
+              "currentHolding": 14679977474290,
+              "activeAccounts": 5
+            },
+            {
+              "id": "clean-maroon-tapir",
+              "size": 4,
+              "type": "transfer",
+              "tokenAmount": 22686586916045,
+              "currentHolding": 22686586916045,
+              "activeAccounts": 4
+            }
+          ],
+          "totalHolders": 733,
+          "detectedAt": "2026-11-11T20:16:17.361233299Z",
+          "launchpad.name": "Pump.Fun",
+          "tokenMeta.symbol": "Teeny",
+          "tokenMeta.name": "Teenydroid",
+          "markets": [
+            {
+              "pubkey": "BEUbx7K1fMCE7SJrLHZFmYqRTDfTZW4HDbocndrQjX5k",
+              "marketType": "pump_fun_amm"
+            },
+            {
+              "pubkey": "AzaPHywtYJZA8SpkqBbKYMW6wUMkfyvYneWipkgy8Wxc",
+              "marketType": "meteora_damm_v2"
+            }
+          ]
+        },
+        "insider_related_keys": [
+          {
+            "path": "topHolders[].insider",
+            "key": "insider",
+            "value_type": "list_items",
+            "sample": {
+              "items": 20,
+              "true": 0,
+              "false": 20,
+              "null": 0,
+              "other_preview": []
+            }
+          },
+          {
+            "path": "topHolders[0].insider",
+            "key": "insider",
+            "value_type": "bool",
+            "sample": false
+          },
+          {
+            "path": "graphInsidersDetected",
+            "key": "graphInsidersDetected",
+            "value_type": "int",
+            "sample": 17
+          },
+          {
+            "path": "insiderNetworks",
+            "key": "insiderNetworks",
+            "value_type": "list",
+            "sample": {
+              "len": 4,
+              "first": {
+                "id": "fancy-cobalt-hedgehog",
+                "size": 4,
+                "type": "transfer",
+                "tokenAmount": 43721593766039,
+                "currentHolding": 43721593766039,
+                "activeAccounts": 4
+              }
+            }
+          }
+        ]
+      },
+      "saved_nonempty_sample": "/workspace/desk/logs/raw/rugcheck_insiders_graph_632ZCbqv28AoF9ausrd4pGMAE5ccczxAg2Ltzsy4TrWG.json (already saved)"
+    }
+  ]
+}

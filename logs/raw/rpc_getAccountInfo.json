@@ -1,0 +1,51 @@
+{
+  "jsonrpc": "2.0",
+  "result": {
+    "context": {
+      "apiVersion": "4.4.0",
+      "slot": 468253333
+    },
+    "value": {
+      "data": {
+        "parsed": {
+          "info": {
+            "decimals": 6,
+            "extensions": [
+              {
+                "extension": "metadataPointer",
+                "state": {
+                  "authority": null,
+                  "metadataAddress": "A3qwGJEEc6Vzq17gWj3T97J1ArR3fHD5wgNmR2pkpump"
+                }
+              },
+              {
+                "extension": "tokenMetadata",
+                "state": {
+                  "additionalMetadata": [],
+                  "mint": "A3qwGJEEc6Vzq17gWj3T97J1ArR3fHD5wgNmR2pkpump",
+                  "name": "CYBRON",
+                  "symbol": "CYBRON",
+                  "updateAuthority": null,
+                  "uri": "https://ipfs.io/ipfs/bafkreifpwefvpp26djh6tlxntvts6mlhf44uwd6kjb4slv55j55jv63sda"
+                }
+              }
+            ],
+            "freezeAuthority": null,
+            "isInitialized": true,
+            "mintAuthority": null,
+            "supply": "996998474752288"
+          },
+          "type": "mint"
+        },
+        "program": "spl-token-2022",
+        "space": 410
+      },
+      "executable": false,
+      "lamports": 2733040,
+      "owner": "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb",
+      "rentEpoch": 18446744073709551615,
+      "space": 410
+    }
+  },
+  "id": 1
+}

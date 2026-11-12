@@ -1,0 +1,13 @@
+{
+  "http_status": 200,
+  "pairs": [
+    {
+      "dexId": "pumpswap",
+      "pairAddress": "DUxG3Y9BAe6kvz2kkXYtHwRpc5jDj2pSh7xk9bYyhwwD",
+      "pairCreatedAt": 1794428021000,
+      "liquidity_usd": 10124.51,
+      "symbol": "CYBRON",
+      "name": "CYBRON"
+    }
+  ]
+}

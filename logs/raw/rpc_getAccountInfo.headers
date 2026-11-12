@@ -1,0 +1,25 @@
+HTTP/2 200 
+content-type: application/json; charset=utf-8
+content-length: 823
+date: Wed, 11 Nov 2026 20:13:55 GMT
+x-rpc-node: slc13
+x-ratelimit-tier: free
+x-ratelimit-method-limit: 50
+x-ratelimit-method-remaining: 49
+x-ratelimit-rps-limit: 250
+x-ratelimit-rps-remaining: 249
+x-ratelimit-endpoint-limit: unlimited
+x-ratelimit-endpoint-remaining: -14672
+x-ratelimit-conn-limit: 40
+x-ratelimit-conn-remaining: 39
+x-ratelimit-connrate-limit: 40
+x-ratelimit-connrate-remaining: 39
+x-ratelimit-pubsub-limit: 5
+x-ratelimit-pubsub-remaining: 5
+access-control-allow-origin: backend_traffic
+access-control-allow-methods: OPTIONS, POST, GET
+access-control-allow-headers: authorization, *
+access-control-max-age: 86400
+allow: OPTIONS, POST, GET
+alt-svc: h3=":443"; ma=60
+

@@ -1,0 +1,13 @@
+{
+  "http_status": 200,
+  "pairs": [
+    {
+      "dexId": "pumpswap",
+      "pairAddress": "4rsLuj8sBFFMwM4AK6p4R5RbZ7y2m9CGrefxVb29JbgN",
+      "pairCreatedAt": 1794355156000,
+      "liquidity_usd": 38809,
+      "symbol": "NIHAO",
+      "name": "nihao cat"
+    }
+  ]
+}

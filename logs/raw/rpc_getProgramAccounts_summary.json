@@ -1,0 +1,36 @@
+[
+  {
+    "program": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+    "label": "token",
+    "timeout_s": 30,
+    "started": "2026-11-11T23:14:47+0300",
+    "http_status": 200,
+    "elapsed_s": 1.393,
+    "bytes": 36,
+    "account_count": 0
+  },
+  {
+    "program": "TokenzQdBNbLqP5VEhdkAS5EPFLC1PEuX8ofVHFKKq3s",
+    "label": "token2022_as_specified_in_prompt",
+    "timeout_s": 30,
+    "started": "2026-11-11T23:14:48+0300",
+    "http_status": 200,
+    "elapsed_s": 1.373,
+    "bytes": 85,
+    "error": {
+      "code": -32602,
+      "message": "Invalid param: WrongSize"
+    },
+    "account_count": null
+  },
+  {
+    "program": "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb",
+    "label": "token2022_actual_owner",
+    "timeout_s": 30,
+    "started": "2026-11-11T23:14:50+0300",
+    "http_status": 200,
+    "elapsed_s": 1.926,
+    "bytes": 264736,
+    "account_count": 462
+  }
+]

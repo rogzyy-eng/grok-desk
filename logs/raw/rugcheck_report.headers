@@ -1,0 +1,8 @@
+HTTP/2 200 
+server: nginx
+date: Wed, 11 Nov 2026 20:13:54 GMT
+content-type: application/json; charset=utf-8
+vary: Accept-Encoding
+x-rate-limit-limit: 15
+x-rate-limit-remaining: 14
+

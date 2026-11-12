@@ -1,0 +1,58 @@
+[
+  {
+    "chainId": "solana",
+    "dexId": "pumpswap",
+    "url": "https://dexscreener.com/solana/duxg3y9bae6kvz2kkxythwrpc5jdj2psh7xk9byyhwwd",
+    "pairAddress": "DUxG3Y9BAe6kvz2kkXYtHwRpc5jDj2pSh7xk9bYyhwwD",
+    "baseToken": {
+      "address": "A3qwGJEEc6Vzq17gWj3T97J1ArR3fHD5wgNmR2pkpump",
+      "name": "CYBRON",
+      "symbol": "CYBRON"
+    },
+    "quoteToken": {
+      "address": "So11111111111111111111111111111111111111112",
+      "name": "Wrapped SOL",
+      "symbol": "SOL"
+    },
+    "priceNative": "0.0000001284",
+    "priceUsd": "0.00001089",
+    "txns": {
+      "m5": {
+        "buys": 498,
+        "sells": 536
+      },
+      "h1": {
+        "buys": 498,
+        "sells": 536
+      },
+      "h6": {
+        "buys": 498,
+        "sells": 536
+      },
+      "h24": {
+        "buys": 498,
+        "sells": 536
+      }
+    },
+    "volume": {
+      "h24": 58540.68,
+      "h6": 58540.68,
+      "h1": 58540.68,
+      "m5": 58540.68
+    },
+    "priceChange": {
+      "m5": -68.98,
+      "h1": -68.98,
+      "h6": -68.98,
+      "h24": -68.98
+    },
+    "liquidity": {
+      "usd": 6994.09,
+      "base": 342106133,
+      "quote": 38.5066
+    },
+    "fdv": 10880,
+    "marketCap": 10880,
+    "pairCreatedAt": 1794428021000
+  }
+]

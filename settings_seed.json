@@ -1,0 +1,10 @@
+{
+ "fomo_handle": "rogzyy3",
+ "fomo_signup_confirmed_via_ref": true,
+ "set_at": "2026-11-11T23:02+03:00",
+ "analyst_mode": "rules",
+ "notifier": "webpush",
+ "telegram": "skipped",
+ "rpc_url": "https://api.mainnet-beta.solana.com",
+ "jev": "skipped"
+}

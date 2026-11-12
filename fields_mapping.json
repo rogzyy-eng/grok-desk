@@ -1,0 +1,262 @@
+{
+  "mint": "A3qwGJEEc6Vzq17gWj3T97J1ArR3fHD5wgNmR2pkpump",
+  "name": "CYBRON",
+  "symbol": "CYBRON",
+  "source": "PumpPortal subscribeMigration (live)",
+  "received_at_europe_istanbul": "2026-11-11T23:13:41+03:00",
+  "notes": [
+    "Paths are exact key paths from saved raw samples. Missing fields are null; nothing was guessed.",
+    "PumpPortal pool is the string 'pump-amm', not a base58 address. The PumpSwap pool address appeared later as DexScreener [].pairAddress and RugCheck markets[].pubkey (marketType pump_fun_amm).",
+    "DexScreener tokens/v1 immediately after migration returned only a pumpfun pair with no liquidity key. The saved file is a retry ~1 min later that returned the pumpswap pair.",
+    "RugCheck insiders/graph HTTP 200 body was []. Node/edge key paths were not observed.",
+    "Canonical Token-2022 program (getAccountInfo owner) is TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb. The prompt id TokenzQdBNbLqP5VEhdkAS5EPFLC1PEuX8ofVHFKKq3s is invalid (RPC -32602 WrongSize)."
+  ],
+  "pumpportal_migration": {
+    "file": "logs/raw/pumpportal_migration.json",
+    "root": "object",
+    "fields": {
+      "mint": {
+        "path": "mint",
+        "found": true,
+        "sample": "A3qwGJEEc6Vzq17gWj3T97J1ArR3fHD5wgNmR2pkpump"
+      },
+      "pool": {
+        "path": "pool",
+        "found": true,
+        "sample": "pump-amm",
+        "note": "string label, not a base58 pool address"
+      },
+      "signature": {
+        "path": "signature",
+        "found": true,
+        "sample": "5Y65JvfzrbkorB1NBPk7C5tVGzdhxsywsBAMK2dPs7YEBwsTPopjNwti6vhjAsSuU6XWCWTiR1vbWHYYDUtmthER"
+      },
+      "creator": {
+        "path": null,
+        "found": false,
+        "sample": null
+      }
+    },
+    "also_observed": {
+      "txType": "migrate"
+    }
+  },
+  "dexscreener_pair": {
+    "file": "logs/raw/dexscreener_pair.json",
+    "endpoint": "GET https://api.dexscreener.com/tokens/v1/solana/{mint}",
+    "root": "array of pair objects",
+    "saved_pair_dexId": "pumpswap",
+    "fields": {
+      "pairAddress": {
+        "path": "[].pairAddress",
+        "found": true,
+        "sample": "DUxG3Y9BAe6kvz2kkXYtHwRpc5jDj2pSh7xk9bYyhwwD"
+      },
+      "dexId": {
+        "path": "[].dexId",
+        "found": true,
+        "sample": "pumpswap"
+      },
+      "priceUsd": {
+        "path": "[].priceUsd",
+        "found": true,
+        "sample": "0.00001089",
+        "type": "string"
+      },
+      "liquidity.usd": {
+        "path": "[].liquidity.usd",
+        "found": true,
+        "sample": 6994.09
+      },
+      "marketCap": {
+        "path": "[].marketCap",
+        "found": true,
+        "sample": 10880
+      },
+      "volume.m5": {
+        "path": "[].volume.m5",
+        "found": true,
+        "sample": 58540.68
+      },
+      "volume.h1": {
+        "path": "[].volume.h1",
+        "found": true,
+        "sample": 58540.68
+      },
+      "volume.h24": {
+        "path": "[].volume.h24",
+        "found": true,
+        "sample": 58540.68
+      },
+      "txns.m5.buys": {
+        "path": "[].txns.m5.buys",
+        "found": true,
+        "sample": 498
+      },
+      "txns.m5.sells": {
+        "path": "[].txns.m5.sells",
+        "found": true,
+        "sample": 536
+      },
+      "txns.h1.buys": {
+        "path": "[].txns.h1.buys",
+        "found": true,
+        "sample": 498
+      },
+      "txns.h1.sells": {
+        "path": "[].txns.h1.sells",
+        "found": true,
+        "sample": 536
+      },
+      "priceChange.m5": {
+        "path": "[].priceChange.m5",
+        "found": true,
+        "sample": -68.98
+      },
+      "priceChange.h1": {
+        "path": "[].priceChange.h1",
+        "found": true,
+        "sample": -68.98
+      },
+      "priceChange.h24": {
+        "path": "[].priceChange.h24",
+        "found": true,
+        "sample": -68.98
+      },
+      "pairCreatedAt": {
+        "path": "[].pairCreatedAt",
+        "found": true,
+        "sample": 1794428021000,
+        "note": "milliseconds epoch"
+      }
+    }
+  },
+  "rugcheck_report": {
+    "file": "logs/raw/rugcheck_report.json",
+    "root": "object",
+    "fields": {
+      "creator": {
+        "path": "creator",
+        "found": true,
+        "sample": "GAHEsVuqnfv242J96FimQiobCYpZb1suDEALYRHqmPmF"
+      },
+      "creator_balance": {
+        "path": "creatorBalance",
+        "found": true,
+        "sample": 0
+      },
+      "markets_pool_address": {
+        "path": "markets[].pubkey",
+        "found": true,
+        "note": "no 'pool' key on a market; identify PumpSwap-like market via marketType",
+        "sample": [
+          {
+            "pubkey": "DUxG3Y9BAe6kvz2kkXYtHwRpc5jDj2pSh7xk9bYyhwwD",
+            "marketType": "pump_fun_amm"
+          },
+          {
+            "pubkey": "GEoY7P6fKCMRCjLubcfAsipNXxF8JqZwZcmSLVBBnGjR",
+            "marketType": "meteora_damm_v2"
+          }
+        ]
+      },
+      "lp_locked_percent": {
+        "path": "markets[].lp.lpLockedPct",
+        "found": true,
+        "sample": {
+          "pump_fun_amm": 100,
+          "meteora_damm_v2": 0
+        }
+      },
+      "lp_burned_percent": {
+        "path": null,
+        "found": false,
+        "sample": null,
+        "note": "no burn/lpBurned/lpBurnedPct key; related keys lpLocked, lpUnlocked, lpCurrentSupply, currentSupply, totalTokensUnlocked were not used as a substitute"
+      },
+      "topHolders": {
+        "path": "topHolders",
+        "found": true,
+        "count": 20,
+        "item_keys": [
+          "address",
+          "amount",
+          "decimals",
+          "pct",
+          "uiAmount",
+          "uiAmountString",
+          "owner",
+          "insider"
+        ]
+      }
+    }
+  },
+  "rugcheck_insiders_graph": {
+    "file": "logs/raw/rugcheck_insiders_graph.json",
+    "http_status": 200,
+    "root": "empty array []",
+    "fields": {
+      "nodes": {
+        "path": null,
+        "found": false,
+        "sample": null
+      },
+      "edges": {
+        "path": null,
+        "found": false,
+        "sample": null
+      },
+      "wallet_key": {
+        "path": null,
+        "found": false,
+        "sample": null
+      },
+      "holding_key": {
+        "path": null,
+        "found": false,
+        "sample": null
+      },
+      "funding_link_keys": {
+        "path": null,
+        "found": false,
+        "sample": null
+      }
+    }
+  },
+  "rpc_getAccountInfo": {
+    "file": "logs/raw/rpc_getAccountInfo.json",
+    "fields": {
+      "mintAuthority": {
+        "path": "result.value.data.parsed.info.mintAuthority",
+        "found": true,
+        "sample": null,
+        "note": "JSON null = revoked"
+      },
+      "freezeAuthority": {
+        "path": "result.value.data.parsed.info.freezeAuthority",
+        "found": true,
+        "sample": null,
+        "note": "JSON null = revoked"
+      },
+      "supply": {
+        "path": "result.value.data.parsed.info.supply",
+        "found": true,
+        "sample": "996998474752288",
+        "type": "string"
+      },
+      "decimals": {
+        "path": "result.value.data.parsed.info.decimals",
+        "found": true,
+        "sample": 6
+      },
+      "program_owner": {
+        "path": "result.value.owner",
+        "found": true,
+        "sample": "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb"
+      }
+    },
+    "also_observed": {
+      "result.value.data.program": "spl-token-2022"
+    }
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "http_status": 200,
+  "pairs": [
+    {
+      "dexId": "pumpswap",
+      "pairAddress": "B4Cp45PGifVM5FAXfh6AeV8QZ3eUNQnqGBw7KuC7MHnB",
+      "pairCreatedAt": 1791311393000,
+      "liquidity_usd": 238387.79,
+      "symbol": "CBUCKS",
+      "name": "Cartoon Money"
+    }
+  ]
+}
