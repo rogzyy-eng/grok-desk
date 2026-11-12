@@ -6,6 +6,7 @@ import json
 import re
 
 import fields
+from sources import FetchError
 from agents.base import Agent, iso, money
 
 
@@ -87,6 +88,12 @@ class Scanner(Agent):
             batch = coins[i:i + 30]
             try:
                 pairs = await self.src.dex_pairs([c["mint"] for c in batch])   # 1 batch per tick
+            except FetchError as e:
+                if e.status == 429:
+                    await self.backoff_429()
+                    return
+                self.log.warning("dexscreener batch failed: %s", e)
+                continue
             except Exception as e:
                 self.log.warning("dexscreener batch failed: %s", e)
                 continue

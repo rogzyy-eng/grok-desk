@@ -88,8 +88,7 @@ class Risk(Agent):
                 pairs = await self.src.dex_pairs(list({p["mint"] for p in pos}))
             except FetchError as e:
                 if e.status == 429:
-                    self.log.warning("429 from DexScreener: backing off %ss, %d polls missed", c["backoff_429_s"], len(pos))
-                    await self.sleep(c["backoff_429_s"])
+                    await self.backoff_429(len(pos))
                 return []
             for m in {p["mint"] for p in pos}:
                 b = fields.best_pair([x for x in pairs or [] if (x.get("baseToken") or {}).get("address", m) == m])

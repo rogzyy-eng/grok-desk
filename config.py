@@ -61,7 +61,7 @@ DEFAULTS = {
 # Slider ranges for the Account tab (min, max, step). Not in the spec text; UI only.
 RANGES = {
     "scanner.min_liquidity_usd": (1000, 200000, 500), "scanner.max_top10_pct": (5, 60, 1),
-    "scanner.max_h1_change_pct": (10, 300, 5), "scanner.poll_s": (15, 300, 5),
+    "scanner.max_h1_change_pct": (10, 300, 5), "scanner.poll_s": (5, 300, 5),
     "scanner.min_pool_age_min": (0, 60, 1), "scanner.max_wait_min": (10, 240, 5),
     "scanner.runner_h24_pct": (50, 2000, 50), "scanner.max_h1_drop_pct": (5, 95, 1),
     "scanner.max_m5_drop_pct": (5, 95, 1), "scanner.max_from_high_pct": (5, 95, 1), "auditor.max_dev_pct": (0, 20, 0.5),
@@ -77,7 +77,7 @@ RANGES = {
     "analyst.rules_chase_h1_pct": (10, 300, 5), "analyst.rules_crash_h1_pct": (10, 95, 1),
     "executor.stack_pct": (1, 50, 0.5), "executor.max_open": (1, 10, 1), "executor.min_ticket_usd": (5, 500, 0.5),
     "executor.recheck_liq_drop_pct": (1, 80, 1), "executor.recheck_price_move_pct": (1, 80, 1),
-    "executor.confirm_min": (1, 60, 1), "executor.max_liq_pct": (0.1, 10, 0.1),
+    "executor.confirm_min": (0, 60, 1), "executor.max_liq_pct": (0.1, 10, 0.1),
     "risk.poll_s": (5, 120, 1), "risk.stop_pct": (1, 50, 0.5), "risk.trail_start_pct": (1, 200, 1),
     "risk.trail_pct": (1, 50, 0.5), "risk.timeout_h": (0.5, 48, 0.5), "risk.timeout_min_gain_pct": (0, 100, 1),
     "risk.sold_wait_min": (1, 30, 1), "risk.no_price_polls": (1, 20, 1), "risk.backoff_429_s": (5, 300, 5),

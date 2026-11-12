@@ -34,6 +34,14 @@ class Agent:
     def decide(self, mint, decision, reason, data=None):
         self.bus.decision(self.name, mint, decision, reason, data)
 
+    async def backoff_429(self, n=0, where="DexScreener"):
+        """Sleep [risk.backoff_429_s] after a 429 so a 5s poll does not hammer the source."""
+        wait = float(self.db.get("risk.backoff_429_s", 30))
+        extra = f", {n} polls missed" if n else ""
+        self.log.warning("429 from %s: backing off %ss%s", where, wait, extra)
+        await self.sleep(wait)
+        return wait
+
     async def with_retries(self, fn, *a):
         """Source error or timeout: retry [retries] times, [retry_gap_s] apart (Auditor edge cases)."""
         from sources import FetchError

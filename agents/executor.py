@@ -1,6 +1,8 @@
 """AGENT 4 · EXECUTOR — sizes and opens. NEVER places an order on FOMO.
 PAPER: simulated fill with fees.py. LIVE: push [Buy on FOMO] + [Bought]; the position waits
-[confirm_min] for the tap, else it expires. Size = stack × [stack_pct]%, bumped to (or skipped
+[confirm_min] for the tap, else it expires. confirm_min=0 means no confirm wait: PAPER fills
+immediately (as always); a LIVE signal stays pending until [Bought] and never auto-expires.
+Size = stack × [stack_pct]%, bumped to (or skipped
 under) [min_ticket_usd], capped at [max_liq_pct]% of pool liquidity ($40,000 → $800); a cap under the min ticket skips.
 The risk settings (stop/trail start/trail/timeout/runner trail) are snapshotted onto the position at open;
 volatile coins (|5-min price change| >= risk.volatile_m5_pct) get them × risk.volatile_factor. PAPER fills pay
@@ -10,6 +12,7 @@ import fields
 import links
 from agents.base import Agent
 from notifier import buy_button
+from sources import FetchError
 
 
 def size_ticket(stack, c, liq=None):
@@ -60,6 +63,10 @@ class Executor(Agent):
     async def fresh(self, mint):
         try:
             return fields.best_pair(await self.src.dex_pairs([mint]))
+        except FetchError as e:
+            if e.status == 429:
+                await self.backoff_429()
+            return None
         except Exception:
             return None
 
@@ -127,8 +134,12 @@ class Executor(Agent):
         return pid
 
     async def expire_pending(self):
-        """LIVE: no [Bought] tap within [confirm_min] → the signal expires (nothing was bought)."""
-        lim = float(self.db.get("executor.confirm_min", 5)) * 60
+        """LIVE: no [Bought] tap within [confirm_min] → the signal expires (nothing was bought).
+        confirm_min<=0: no window, so nothing expires (and there is no sleep/division on 0)."""
+        mins = float(self.db.get("executor.confirm_min", 5))
+        if mins <= 0:
+            return
+        lim = mins * 60
         for p in self.db.q("SELECT * FROM positions WHERE status='pending' AND opened_at<?", (self.clock() - lim,)):
             self.db.update("positions", "id=?", (p["id"],), {"status": "expired", "closed_at": self.clock()})
             self.db.update("signals", "id=?", (p["signal_id"],), {"status": "expired"})

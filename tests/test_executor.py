@@ -3,12 +3,16 @@
 import asyncio
 import inspect
 
+import config
 import fees
 from agents import executor as exmod
 from agents.executor import Executor, size_ticket, skip_warning
+from agents.risk import Risk
+from agents.scanner import Scanner
 from bus import Bus
 from conftest import FakeSrc, no_sleep
 from notifier import Notifier
+from sources import FetchError
 
 
 def test_fees_tiers():
@@ -72,3 +76,112 @@ def test_live_signal_only(db):
     src = inspect.getsource(exmod)
     for bad in ("sendTransaction", "private_key", "password", "swap("):
         assert bad not in src
+
+
+def test_ranges_allow_fast_settings():
+    assert config.RANGES["scanner.poll_s"] == (5, 300, 5)
+    assert config.RANGES["executor.confirm_min"] == (0, 60, 1)
+    assert config.RANGES["risk.poll_s"][0] == 5
+    assert config.RANGES["executor.max_open"] == (1, 10, 1)
+
+
+def test_confirm_min_zero_paper_enters_immediately(db):
+    db.set("executor.confirm_min", 0)
+    n = Notifier(db, Bus(db))
+    t = [1000.0]
+    ex = Executor(db, Bus(db), FakeSrc(price=1.0, liq=50000), n, clock=lambda: t[0], sleep=no_sleep)
+    db.insert("coins", {"mint": "Z0", "symbol": "Z0"})
+    pid = asyncio.run(ex.process({"mint": "Z0", "pair": {"price_usd": 1.0, "liq_usd": 50000}}))
+    p = db.one("SELECT * FROM positions WHERE id=?", (pid,))
+    assert p["status"] == "open" and p["qty"] > 0
+    t[0] += 3600
+    asyncio.run(ex.expire_pending())
+    assert db.one("SELECT status FROM positions WHERE id=?", (pid,))["status"] == "open"
+
+
+def test_confirm_min_zero_live_never_auto_expires(db):
+    db.set("desk.mode", "LIVE")
+    db.x("INSERT OR REPLACE INTO settings VALUES('desk.live_stack','1240',0)")
+    db.set("executor.confirm_min", 0)
+    n = Notifier(db, Bus(db))
+    t = [1000.0]
+    ex = Executor(db, Bus(db), FakeSrc(price=1.0, liq=50000), n, clock=lambda: t[0], sleep=no_sleep)
+    db.insert("coins", {"mint": "L0", "symbol": "L0"})
+    asyncio.run(ex.process({"mint": "L0", "pair": {"price_usd": 1.0, "liq_usd": 50000}}))
+    assert db.open_positions()[0]["status"] == "pending" and db.open_positions()[0]["qty"] == 0
+    t[0] += 86400
+    asyncio.run(ex.expire_pending())
+    assert db.open_positions()[0]["status"] == "pending"     # 0 = no confirm window, never auto-expires
+
+
+def test_confirm_min_still_expires_when_positive(db):
+    db.set("desk.mode", "LIVE")
+    db.x("INSERT OR REPLACE INTO settings VALUES('desk.live_stack','1240',0)")
+    db.set("executor.confirm_min", 5)
+    n = Notifier(db, Bus(db))
+    t = [1000.0]
+    ex = Executor(db, Bus(db), FakeSrc(price=1.0, liq=50000), n, clock=lambda: t[0], sleep=no_sleep)
+    db.insert("coins", {"mint": "L5", "symbol": "L5"})
+    asyncio.run(ex.process({"mint": "L5", "pair": {"price_usd": 1.0, "liq_usd": 50000}}))
+    t[0] += 5 * 60 - 1
+    asyncio.run(ex.expire_pending())
+    assert db.open_positions()[0]["status"] == "pending"
+    t[0] += 2
+    asyncio.run(ex.expire_pending())
+    assert db.one("SELECT status FROM positions")["status"] == "expired"
+
+
+def test_max_open_five_on_190_cash(db):
+    """8% of ~$190 is ~$15; five tickets fit, there is no hidden cap of 2, a sixth is refused."""
+    db.set("executor.max_open", 5)
+    db.move_cash(190 - db.cash(), "set cash 190", "PAPER")
+    assert abs(db.cash() - 190) < 1e-9
+    n = Notifier(db, Bus(db))
+    ex = Executor(db, Bus(db), FakeSrc(price=1.0, liq=50000), n, sleep=no_sleep)
+    for i in range(6):
+        db.insert("coins", {"mint": f"M{i}", "symbol": f"T{i}"})
+        asyncio.run(ex.process({"mint": f"M{i}", "pair": {"price_usd": 1.0, "liq_usd": 50000}}))
+    opens = db.open_positions()
+    assert len(opens) == 5
+    assert all(p["status"] == "open" and p["size_usd"] >= 10 for p in opens)
+    assert db.cash() > 100                                          # leftover cash, not a false refusal
+    assert db.one("SELECT status_reason FROM coins WHERE mint='M5'")["status_reason"] == "5 positions already open"
+    assert sum(p["size_usd"] for p in opens) == round(190 - db.cash(), 2)
+
+
+class _BoomSrc:
+    def __init__(self):
+        self.calls = 0
+
+    async def dex_pairs(self, mints):
+        self.calls += 1
+        raise FetchError("HTTP 429", 429)
+
+
+def test_dex_429_backoff(db):
+    """Scanner, Risk and Executor all sleep risk.backoff_429_s on a DexScreener 429 (needed at poll 5s)."""
+    slept = []
+
+    async def rec(s, *_a, **_k):
+        slept.append(s)
+
+    db.set("risk.backoff_429_s", 30)
+    src, n = _BoomSrc(), Notifier(db, Bus(db))
+    db.insert("coins", {"mint": "R4", "symbol": "R4"})
+    db.insert("positions", {"mint": "R4", "mode": "PAPER", "opened_at": 0, "entry_price": 1.0, "size_usd": 16,
+                            "qty": 16, "status": "open", "stop_pct": 15, "stop_price": 0.85, "peak_price": 1.0})
+    r = Risk(db, Bus(db), src, n, sleep=rec)
+    assert asyncio.run(r.tick()) == []
+    assert slept == [30] and src.calls == 1
+
+    slept.clear()
+    db.insert("coins", {"mint": "S4", "status": "waiting", "migrated_at": 1})
+    asyncio.run(Scanner(db, Bus(db), src, n, sleep=rec).tick())
+    assert slept == [30]
+
+    slept.clear()
+    db.insert("coins", {"mint": "E4", "symbol": "E4"})
+    assert asyncio.run(Executor(db, Bus(db), src, n, sleep=rec).process(
+        {"mint": "E4", "pair": {"price_usd": 1.0, "liq_usd": 50000}})) is None
+    assert slept == [30]
+    assert db.one("SELECT status_reason FROM coins WHERE mint='E4'")["status_reason"] == "recheck: no fresh price"
