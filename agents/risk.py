@@ -2,8 +2,8 @@
 reserves over a Solana websocket (onchain.Watcher, evaluated on every account update), checked once against
 DexScreener (> risk.ws_max_diff_pct apart = poll only); otherwise / "poll" / socket down: DexScreener every
 [poll_s]. Exits at the price that fired it (even if it gapped past the line). rug_early sells when the pool's SOL
-drains fast or the creator dumps; pulled stays as the backstop. First trail hit sells half; the runner trails
-wider. Never moves a stop down; never waits for a bounce; can't be paused while a position is open."""
+drains fast or the creator dumps; pulled stays as the backstop. Take-profit (risk.tp_pct) sells a slice once and the rest becomes a runner;
+first trail hit otherwise sells half. The runner trails wider from the fill price. Never moves a stop down; never waits for a bounce; can't be paused while a position is open."""
 import asyncio
 
 import fees
@@ -15,17 +15,19 @@ from sources import FetchError
 
 
 SCALED = ("stop_pct", "trail_start_pct", "trail_pct", "timeout_h", "runner_trail_pct")
+PLAIN = ("tp_pct", "tp_sell_frac")  # snapshotted, not scaled by volatile_factor
 
 
 def pos_cfg(p, c):
     """Risk settings for one position. Positions opened since 2026-11-12 carry a snapshot of stop / trail
     start / trail / timeout / runner trail taken at open (volatile × factor already applied), so later
-    setting changes never touch them. Older positions (no snapshot) fall back to the live settings,
-    volatile ones × [volatile_factor]."""
+    setting changes never touch them. tp_pct / tp_sell_frac are snapshotted the same way, unscaled.
+    Older positions (no snapshot) fall back to the live settings, volatile ones × [volatile_factor]."""
     if c.get("_pos"):
         return c
     if p.get("trail_pct") is not None:
         snap = {k: float(p[k]) for k in SCALED if p.get(k) is not None}
+        snap.update({k: float(p[k]) for k in PLAIN if p.get(k) is not None})
         return {**c, **snap, "_pos": True}
     if not p.get("volatile"):
         return {**c, "_pos": True}
@@ -56,6 +58,53 @@ def check_exit(p, price, now, c):
     if (now - p["opened_at"]) / 3600 >= c["timeout_h"] and pct < c["timeout_min_gain_pct"]:
         return "timeout"
     return None
+
+
+def take_profit_hit(p, price, c):
+    """True when a still-full position has reached its snapshotted take-profit. 0 = off."""
+    if p.get("runner"):
+        return False
+    c = pos_cfg(p, c)
+    tp = float(c.get("tp_pct") or 0)
+    return tp > 0 and price >= p["entry_price"] * (1 + tp / 100)
+
+
+def remaining_basis(p, remain_qty, sold_qty):
+    """Pro-rata share of the ticket still sitting in the runner."""
+    orig = (remain_qty or 0) + (sold_qty or 0)
+    if orig <= 0:
+        return 0.0
+    return float(p["size_usd"] or 0) * remain_qty / orig
+
+
+def breakeven_stop_price(p, remain_qty, sold_qty, liq, disc):
+    """Min price at which selling the runner nets at least its share of the ticket
+    (entry + its fees, after PAPER impact). The runner cannot turn the trade into a loss."""
+    basis = remaining_basis(p, remain_qty, sold_qty)
+    qty = remain_qty or 0
+    if qty <= 0:
+        return p.get("stop_price") or 0.0
+
+    def net_at(px):
+        if p.get("mode") == "PAPER":
+            gross, _ = fees.sell_impact(qty, px, liq)
+        else:
+            gross = qty * px
+        fee = fees.side_fee(max(gross, fees.MIN_TRADE), disc) if gross > 0 else 0.0
+        return gross - fee
+
+    lo, hi = 0.0, max((basis / qty) * 8, float(p.get("entry_price") or 1) * 4, 1e-6)
+    for _ in range(12):
+        if net_at(hi) >= basis:
+            break
+        hi *= 2
+    for _ in range(60):
+        mid = (lo + hi) / 2
+        if net_at(mid) >= basis:
+            hi = mid
+        else:
+            lo = mid
+    return hi
 
 
 def pulled(p, price, liq, c):
@@ -231,17 +280,26 @@ class Risk(Agent):
         return exits
 
     async def assess(self, p, price, liq, c, now, source="DexScreener", rug=None):
-        """One price for one open position -> [] or [exit/partial dict]. rug_early > pulled > stop/trail/timeout."""
+        """One price for one open position -> [] or [exit/partial dict].
+        rug_early > pulled > take-profit > stop/trail/timeout. After a partial, peak is reset to
+        the fill so the runner is not immediately stopped against a stale high."""
         why_pulled = pulled(p, price, liq, c)          # reads the previous update's last_price
         peak = max(p["peak_price"] or price, price)
         p = {**p, "peak_price": peak, "last_price": price, "no_price_polls": 0,
              "last_liq_usd": liq if liq is not None else p.get("last_liq_usd")}
         stop, trail, exit_line, active = lines(p, c)
         reason = "rug_early" if rug else ("pulled" if why_pulled else check_exit(p, price, now, c))
+        if reason not in ("rug_early", "pulled", "stop") and take_profit_hit(p, price, c):
+            reason = "tp"
         self.db.update("positions", "id=?", (p["id"],), {"peak_price": peak, "last_price": price, "no_price_polls": 0,
                                                          "trail_active": int(active), "exit_line": exit_line,
                                                          "last_liq_usd": p["last_liq_usd"], "price_source": source or "DexScreener"})
         self.log.info("%s price=%s (%s) peak=%s stop=%s trail=%s action=%s", p["mint"], price, source, peak, stop, trail, reason or "hold")
+        if reason == "tp":
+            frac = float(pos_cfg(p, c).get("tp_sell_frac") or 0.5)
+            part = await self.sell_partial(p, price, liq, c, frac, kind="tp", source=source)
+            if part:
+                return [part]
         if reason == "trail" and not p.get("runner"):
             half = await self.sell_half(p, price, liq, c, source)
             if half:
@@ -261,36 +319,69 @@ class Risk(Agent):
 
     async def sell_half(self, p, price, liq, c, source=None):
         """First trail hit: sell half (FOMO fee on this side), keep the rest as a runner trailing
-        [runner_trail_pct] off the top. A half under FOMO's $5 minimum -> None (sell it all)."""
-        half = (p["qty"] or 0) / 2
-        if half * price < fees.MIN_TRADE:
+        [runner_trail_pct] off the fill. A half under FOMO's $5 minimum -> None (sell it all)."""
+        return await self.sell_partial(p, price, liq, c, 0.5, kind="trail", source=source)
+
+    async def sell_partial(self, p, price, liq, c, frac, kind="trail", source=None):
+        """Sell `frac` of qty once. The rest is a runner: peak restarts at the fill price, trail
+        arms immediately at [runner_trail_pct]. kind='tp' also raises the stop to at least
+        breakeven on entry (net of fees for the remaining half). Slice or remainder under
+        FOMO's $5 minimum, or frac>=1 -> None (caller sells it all)."""
+        qty = p["qty"] or 0
+        frac = float(frac)
+        sold = qty * frac
+        remain = qty - sold
+        if frac >= 1 or sold * price < fees.MIN_TRADE or remain * price < fees.MIN_TRADE:
             return None
         now = self.clock()
         name = self.db.coin_name(p["mint"])
         disc = float(self.db.get("desk.fees_ref_discount", 0.10))
-        gross, imp = self.sell_value(p, half, price, liq)
+        gross, imp = self.sell_value(p, sold, price, liq)
         pfee = fees.side_fee(max(gross, fees.MIN_TRADE), disc) if gross > 0 else 0.0
         net = gross - pfee
-        pnl = net - p["size_usd"] / 2           # realised on the half
+        basis = remaining_basis(p, remain, sold)
+        pnl = net - (float(p["size_usd"]) - basis)
         rt = pos_cfg(p, c).get("runner_trail_pct", 30)
-        self.db.update("positions", "id=?", (p["id"],), {
-            "runner": 1, "qty": p["qty"] - half, "partial_at": now, "partial_qty": half, "partial_price": price,
+        # Fresh peak from the fill: a gap through the trail must not immediately dump the runner
+        # against the pre-sale high (HAPPY: half-sale and runner sale in the same minute).
+        row = {
+            "runner": 1, "qty": remain, "partial_at": now, "partial_qty": sold, "partial_price": price,
             "partial_usd": round(net, 6), "partial_fee": round(pfee, 6),
-            "fees_usd": round((p["entry_fee"] or 0) + pfee, 6)})
+            "fees_usd": round((p["entry_fee"] or 0) + pfee, 6),
+            "peak_price": price, "trail_active": 1, "last_price": price,
+        }
+        if kind == "tp":
+            be = breakeven_stop_price(p, remain, sold, self.exit_liq(p, liq), disc)
+            row["stop_price"] = max(p["stop_price"] or 0, be)
+            p = {**p, "stop_price": row["stop_price"]}
+        self.db.update("positions", "id=?", (p["id"],), row)
+        tag = "tp" if kind == "tp" else "trail"
         if p["mode"] == "PAPER":
-            self.db.move_cash(net, f"paper sell half {name}: trail", "PAPER")
+            self.db.move_cash(net, f"paper sell partial {name}: {tag}", "PAPER")
         imp_txt = f" · impact {imp:.2f}%" if imp else ""
         value = f"{'+' if pnl >= 0 else '-'}${abs(pnl):.2f}"
-        self.bus.activity("sold", p["mint"], "risk", f"Sold half {name}",
-                          f"Risk · trail hit, runner trails {rt:g}%{imp_txt}" + (f" · fiyat: {src_tr(source)}" if source else ""), value)
-        text = (f"Sold half {name}" if p["mode"] == "PAPER" else f"Sell half {name} on FOMO") + f" · {value} · rest trails {rt:g}%"
+        gain = (price / p["entry_price"] - 1) * 100
+        slice_tr = "yarısı satıldı" if abs(frac - 0.5) < 1e-9 else f"%{frac * 100:g}'i satıldı"
+        src_txt = f" · fiyat: {src_tr(source)}" if source else ""
+        if kind == "tp":
+            title = f"kâr al: +%{gain:.0f} · {slice_tr} · {value}"
+            sub = f"Risk · kâr al, runner trail {rt:g}%{imp_txt}{src_txt}"
+            text = (title if p["mode"] == "PAPER" else f"{name} kâr al · {slice_tr} on FOMO · {value}") + src_txt
+            kind_push, decision, reason = "tp", "tp", "tp"
+        else:
+            title = f"Sold half {name}"
+            sub = f"Risk · trail hit, runner trails {rt:g}%{imp_txt}{src_txt}"
+            text = (f"Sold half {name}" if p["mode"] == "PAPER" else f"Sell half {name} on FOMO") + f" · {value} · rest trails {rt:g}%"
+            kind_push, decision, reason = "trail", "partial", "partial"
+        self.bus.activity("sold", p["mint"], "risk", title, sub, value)
         btn = sell_button(p["mint"])
-        await self.notifier.push("trail", text, mint=p["mint"], buttons=[btn])
-        out = {"agent": "risk", "mint": p["mint"], "name": name, "ts": iso(now), "reason": "partial",
-               "entryPrice": p["entry_price"], "exitPrice": price, "qty": half, "grossUsd": round(gross, 4),
+        await self.notifier.push(kind_push, text, mint=p["mint"], buttons=[btn])
+        out = {"agent": "risk", "mint": p["mint"], "name": name, "ts": iso(now), "reason": reason,
+               "entryPrice": p["entry_price"], "exitPrice": price, "qty": sold, "grossUsd": round(gross, 4),
                "feeUsd": round(pfee, 4), "pnlUsd": round(pnl, 2), "impactPct": imp, "runnerTrailPct": rt,
+               "tpPct": pos_cfg(p, c).get("tp_pct") if kind == "tp" else None,
                "mode": p["mode"], "status": "partial", "link": btn["url"]}
-        self.decide(p["mint"], "partial", text, out)
+        self.decide(p["mint"], decision, text, out)
         self.log.info("partial %s", out)
         return out
 
@@ -309,19 +400,25 @@ class Risk(Agent):
         vol = " (volatil)" if p.get("volatile") else ""
         run = " (runner)" if p.get("runner") else ""
         imp_txt = f" · impact {imp:.2f}%" if imp else ""
-        text = {"trail": (f"Sold {name}{run} · +${pnl:.2f} (+{pct:.1f}%)" if pnl >= 0 else f"Sold {name}{run} · -${-pnl:.2f} ({pct:.1f}%)"),
+        value = f"{'+' if pnl >= 0 else '-'}${abs(pnl):.2f} / {pct:+.1f}%"
+        trail_txt = (f"{name}: runner trail: kalan satıldı · {value}" if p.get("runner")
+                     else (f"Sold {name}{run} · +${pnl:.2f} (+{pct:.1f}%)" if pnl >= 0 else f"Sold {name}{run} · -${-pnl:.2f} ({pct:.1f}%)"))
+        tp_txt = f"{name}: kâr al: +%{(price / p['entry_price'] - 1) * 100:.0f} · tamamı satıldı · {'+' if pnl >= 0 else '-'}${abs(pnl):.2f}"
+        text = {"trail": trail_txt,
                 "stop": f"{name} hit the -{sp:g}% stop{vol} · -${abs(pnl):.2f}",
                 "timeout": f"Sell {name}, dead money · {pct:+.1f}% in {c['timeout_h']:g}h",
                 "pulled": f"{name}: liquidity pulled · sell now",
-                "rug_early": f"{name}: rug erken uyarısı · hemen sat · {'+' if pnl >= 0 else '-'}${abs(pnl):.2f}"}[reason]
-        sub = {"trail": f"Risk · trailing stop{run}", "stop": f"Risk · -{sp:g}% stop{vol}",
+                "rug_early": f"{name}: rug erken uyarısı · hemen sat · {'+' if pnl >= 0 else '-'}${abs(pnl):.2f}",
+                "tp": tp_txt}[reason]
+        sub = {"trail": ("Risk · runner trail: kalan satıldı" if p.get("runner") else "Risk · trailing stop"),
+               "stop": f"Risk · -{sp:g}% stop{vol}",
                "timeout": f"Risk · timeout {c['timeout_h']:g}h",
                "pulled": "Risk · liquidity pulled" + (f" ({detail})" if detail else ""),
-               "rug_early": "Risk · rug erken uyarı" + (f" ({detail})" if detail else "")}[reason] + imp_txt
+               "rug_early": "Risk · rug erken uyarı" + (f" ({detail})" if detail else ""),
+               "tp": "Risk · kâr al"}[reason] + imp_txt
         if source:
             text += f" · fiyat: {src_tr(source)}"
             sub += f" · fiyat: {src_tr(source)}"
-        value = f"{'+' if pnl >= 0 else '-'}${abs(pnl):.2f} / {pct:+.1f}%"
         fees_total = round((p["entry_fee"] or 0) + pfee + xfee, 4)
         if p["mode"] == "PAPER":
             self.db.update("positions", "id=?", (p["id"],), {"status": "closed", "closed_at": now, "exit_price": price,
@@ -332,8 +429,15 @@ class Risk(Agent):
             self.db.update("positions", "id=?", (p["id"],), {"status": "exiting", "exit_price": price, "exit_reason": reason,
                                                              "exit_requested_at": now})
             status = "exiting"
-        self.bus.activity("stopped" if reason == "stop" else "sold", p["mint"], "risk",
-                          f"{'Stopped' if reason == 'stop' else 'Sold'} {name}", sub, value)
+        if reason == "trail" and p.get("runner"):
+            title = f"{name}: runner trail: kalan satıldı"
+        elif reason == "tp":
+            title = f"{name}: kâr al · tamamı satıldı"
+        elif reason == "stop":
+            title = f"Stopped {name}"
+        else:
+            title = f"Sold {name}"
+        self.bus.activity("stopped" if reason == "stop" else "sold", p["mint"], "risk", title, sub, value)
         buttons = [sell_button(p["mint"])] + ([{"label": "Sold", "action": "sold", "mint": p["mint"]}] if p["mode"] == "LIVE" else [])
         await self.notifier.push(reason, text, mint=p["mint"], buttons=buttons)
         out = {"agent": "risk", "mint": p["mint"], "name": name, "ts": iso(now), "reason": reason,

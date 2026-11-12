@@ -43,7 +43,7 @@ def test_trail_stop_timeout(db):
     assert asyncio.run(r.tick({"TR": 2.0 * 0.71})) == []           # 29% off the top still holds (30% runner trail)
     out = asyncio.run(r.tick({"TR": 2.0 * 0.69}))
     assert out[0]["reason"] == "trail" and out[0]["runner"] is True
-    assert any(s["body"].startswith("PAPER · Sold TR (runner) · ") for s in n.sent if s.get("body"))
+    assert any("runner trail: kalan satıldı" in (s.get("body") or "") for s in n.sent)
     assert any(s["body"] == f"PAPER · ST hit the -6% stop · -${abs(reasons['ST']['pnlUsd']):.2f}" for s in n.sent if s.get("body"))
     open_pos(db, "TO", t=100)
     t[0] = 100 + 3 * 3600

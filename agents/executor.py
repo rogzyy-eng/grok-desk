@@ -4,7 +4,7 @@ PAPER: simulated fill with fees.py. LIVE: push [Buy on FOMO] + [Bought]; the pos
 immediately (as always); a LIVE signal stays pending until [Bought] and never auto-expires.
 Size = stack × [stack_pct]%, bumped to (or skipped
 under) [min_ticket_usd], capped at [max_liq_pct]% of pool liquidity ($40,000 → $800); a cap under the min ticket skips.
-The risk settings (stop/trail start/trail/timeout/runner trail) are snapshotted onto the position at open;
+The risk settings (stop/trail start/trail/timeout/runner trail, plus tp_pct / tp_sell_frac) are snapshotted onto the position at open;
 volatile coins (|5-min price change| >= risk.volatile_m5_pct) get them × risk.volatile_factor. PAPER fills pay
 constant-product price impact (size / (liquidity/2)) on top of the FOMO fee."""
 import fees
@@ -33,13 +33,16 @@ def size_ticket(stack, c, liq=None):
 
 
 SNAPSHOT = ("stop_pct", "trail_start_pct", "trail_pct", "timeout_h", "runner_trail_pct")
+SNAPSHOT_PLAIN = ("tp_pct", "tp_sell_frac")  # frozen at open, not scaled by volatile_factor
 
 
 def risk_snapshot(rc, volatile):
     """Risk lines frozen onto the position at open (later setting changes never move them).
-    Volatile coins get × risk.volatile_factor here, once."""
+    Volatile coins get × risk.volatile_factor here, once. Take-profit is snapshotted as-is."""
     f = float(rc.get("volatile_factor", 1)) if volatile else 1.0
-    return {k: round(float(rc[k]) * f, 4) for k in SNAPSHOT}
+    out = {k: round(float(rc[k]) * f, 4) for k in SNAPSHOT}
+    out.update({k: float(rc[k]) for k in SNAPSHOT_PLAIN if k in rc})
+    return out
 
 
 def skip_warning(db):
