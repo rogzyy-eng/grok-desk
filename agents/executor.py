@@ -1,7 +1,7 @@
 """AGENT 4 · EXECUTOR — sizes and opens. NEVER places an order on FOMO.
 PAPER: simulated fill with fees.py. LIVE: push [Buy on FOMO] + [Bought]; the position waits
 [confirm_min] for the tap, else it expires. Size = stack × [stack_pct]%, bumped to (or skipped
-under) [min_ticket_usd], capped at [max_liq_pct]% of pool liquidity ($40,000 → $800)."""
+under) [min_ticket_usd], capped at [max_liq_pct]% of pool liquidity ($40,000 → $800); a cap under the min ticket skips."""
 import fees
 import fields
 import links
@@ -21,6 +21,8 @@ def size_ticket(stack, c, liq=None):
         cap = round(liq * c["max_liq_pct"] / 100.0, 2)
         if t > cap:
             t, note = cap, note + f" · capped at {c['max_liq_pct']:g}% of liquidity (${cap:.2f})"
+            if t < c["min_ticket_usd"]:
+                return None, f"pool too thin: {c['max_liq_pct']:g}% of ${liq:,.0f} liquidity = ${cap:.2f}, under ${c['min_ticket_usd']:.2f} min ticket"
     return t, note
 
 

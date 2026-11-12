@@ -18,7 +18,17 @@ def test_fees_tiers():
     assert fees.side_fee(400) == round(400 * 0.005 * 0.9, 6)
 
 
+def test_default_ten_dollar_ticket(db):
+    c = db.section("executor")
+    assert c["min_ticket_usd"] == 10.0
+    assert size_ticket(200, c)[0] == 16.0                      # 8% of $200, above $10, no bump
+    assert size_ticket(200, c, liq=1000)[0] == 16.0            # 2% of $1,000 = $20 cap
+    assert size_ticket(200, c, liq=400)[0] is None             # 2% of $400 = $8 < $10 -> skip
+    assert size_ticket(100, c)[0] == 10.0                      # $8 bumped to $10
+
+
 def test_bump_skip_cap(db):
+    db.set("executor.min_ticket_usd", 47.5)
     c = db.section("executor")
     assert round(200 * c["stack_pct"] / 100, 2) == 16.0
     assert size_ticket(200, c)[0] == 47.50
@@ -30,6 +40,7 @@ def test_bump_skip_cap(db):
 
 
 def test_paper_fill_max_open_rechecks(db):
+    db.set("executor.min_ticket_usd", 47.5)
     n = Notifier(db, Bus(db))
     ex = Executor(db, Bus(db), FakeSrc(price=0.001, liq=50000), n, sleep=no_sleep)
     ref = {"price_usd": 0.001, "liq_usd": 50000}

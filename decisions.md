@@ -10,3 +10,5 @@
 
 ## VPS (2026-11-12)
 - Droplet grok-desk created by user via panel (API create was 403 not authorized). id 618277419, fra1, s-1vcpu-1gb ($6/mo), Ubuntu 24.04, public IPv4 167.172.98.187, password auth, tag Rogzyy3. Install via DO Web Console.
+- Code hosted at public GitHub repo rogzyy-eng/grok-desk (commit 2a29242), pushed with Osman's classic public_repo token (env GH_DESK_TOKEN, 7-day). Installer sha256 dd2ea85b...0a98b24 verified via raw.githubusercontent.com.
+- 2026-11-12: Osman lowered scanner.min_liquidity_usd to $1000 and min_ticket_usd default to $10; a liquidity cap under the min ticket now skips the coin.

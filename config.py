@@ -44,7 +44,7 @@ DEFAULTS = {
                 "timeout_s": 10, "state_max_chars": 3000,
                 "rules_alive_volume_h1": 25000, "rules_organic_buys_h1": 150, "rules_bundled_penalty": 0.5,
                 "rules_bundled_from": 3, "rules_flush_pct": 5, "rules_chase_h1_pct": 80},
-    "executor": {"stack_pct": 8, "max_open": 2, "min_ticket_usd": 47.50, "below_min": "bump",
+    "executor": {"stack_pct": 8, "max_open": 2, "min_ticket_usd": 10.0, "below_min": "bump",
                  "recheck_liq_drop_pct": 20, "recheck_price_move_pct": 15, "confirm_min": 5,
                  "max_liq_pct": 2},
     "risk": {"poll_s": 15, "stop_pct": 6, "trail_start_pct": 20, "trail_pct": 12, "timeout_h": 3,
