@@ -56,7 +56,7 @@ DEFAULTS = {
 
 # Slider ranges for the Account tab (min, max, step). Not in the spec text; UI only.
 RANGES = {
-    "scanner.min_liquidity_usd": (5000, 200000, 1000), "scanner.max_top10_pct": (5, 60, 1),
+    "scanner.min_liquidity_usd": (1000, 200000, 500), "scanner.max_top10_pct": (5, 60, 1),
     "scanner.max_h1_change_pct": (10, 300, 5), "scanner.poll_s": (15, 300, 5),
     "scanner.min_pool_age_min": (0, 60, 1), "scanner.max_wait_min": (10, 240, 5),
     "scanner.runner_h24_pct": (50, 2000, 50), "auditor.max_dev_pct": (0, 20, 0.5),
