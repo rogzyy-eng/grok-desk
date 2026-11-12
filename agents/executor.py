@@ -57,6 +57,45 @@ def stack_now(db):
     return float(db.get("desk.live_stack") or 0) if db.get("desk.mode") == "LIVE" else db.cash()
 
 
+def _norm_sym(value):
+    return (value or "").strip().casefold()
+
+
+def coin_symbol(db, mint):
+    row = db.one("SELECT symbol FROM coins WHERE mint=?", (mint,)) or {}
+    return _norm_sym(row.get("symbol"))
+
+
+def reentry_skip_reason(db, mint, now, cooldown_min):
+    """Skip a buy on a mint/symbol that is already open, or that closed at a loss inside the cooldown.
+    Same symbol is compared case-insensitively and trimmed (copycats reuse names).
+    cooldown_min <= 0 turns only the loss-window off; an already-open mint/symbol is still skipped.
+    Applies in PAPER and LIVE."""
+    row = db.one("SELECT symbol FROM coins WHERE mint=?", (mint,)) or {}
+    label = (row.get("symbol") or db.coin_name(mint) or "coin").strip() or "coin"
+    sym = _norm_sym(row.get("symbol"))
+    for p in db.open_positions():
+        if p["mint"] == mint:
+            return "already holding"
+        if sym and coin_symbol(db, p["mint"]) == sym:
+            return f"tekrar giriş beklemesi: {label} zaten açık"
+    mins = float(cooldown_min or 0)
+    if mins <= 0:
+        return None
+    recent = db.q(
+        "SELECT p.mint, p.closed_at, c.symbol FROM positions p "
+        "LEFT JOIN coins c ON c.mint = p.mint "
+        "WHERE p.status='closed' AND p.pnl_usd < 0 AND p.closed_at IS NOT NULL AND p.closed_at > ? "
+        "ORDER BY p.closed_at DESC",
+        (now - mins * 60,),
+    )
+    for r in recent:
+        if r["mint"] == mint or (sym and _norm_sym(r.get("symbol")) == sym):
+            ago = max(0, int((now - float(r["closed_at"])) // 60))
+            return f"tekrar giriş beklemesi: {label} {ago} dk önce zararla kapandı"
+    return None
+
+
 class Executor(Agent):
     name = "executor"
 
@@ -90,8 +129,9 @@ class Executor(Agent):
         name = self.db.coin_name(mint)
         if len(self.db.open_positions()) >= c["max_open"]:
             return self._skip(mint, f"{c['max_open']} positions already open")
-        if self.db.one("SELECT 1 FROM positions WHERE mint=? AND status IN ('open','pending','exiting')", (mint,)):
-            return self._skip(mint, "already holding")
+        blocked = reentry_skip_reason(self.db, mint, now, c.get("reentry_cooldown_min", 60))
+        if blocked:
+            return self._skip(mint, blocked)
         ref = ev.get("pair") or {}
         p1 = await self.fresh(mint)
         ok, why = self.recheck(ref, p1, c)
