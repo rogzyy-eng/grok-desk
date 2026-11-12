@@ -36,20 +36,23 @@ LAYER8_PROOF_MINT = "A3qwGJEEc6Vzq17gWj3T97J1ArR3fHD5wgNmR2pkpump"   # CYBRON (S
 
 DEFAULTS = {
     "scanner": {"min_liquidity_usd": 40000, "max_top10_pct": 25, "max_h1_change_pct": 80, "poll_s": 60,
-                "min_pool_age_min": 10, "max_wait_min": 60, "runner_h24_pct": 300},
+                "min_pool_age_min": 10, "max_wait_min": 60, "runner_h24_pct": 300,
+                "max_h1_drop_pct": 50, "max_m5_drop_pct": 40, "max_from_high_pct": 60},
     "auditor": {"enabled": True, "max_dev_pct": 5, "max_top10_pct": 25, "min_lp_locked_pct": 99,
                 "min_pool_age_min": 10, "max_bundled": 5, "max_delegated_accounts": 10, "retries": 3,
                 "retry_gap_s": 2, "graph_min_age_min": 15},
     "analyst": {"mode": "rules", "alive_min": 0.70, "organic_min": 0.65, "chase_max": 0.30, "score_min": 70,
                 "timeout_s": 10, "state_max_chars": 3000,
-                "rules_alive_volume_h1": 25000, "rules_organic_buys_h1": 150, "rules_bundled_penalty": 0.5,
-                "rules_bundled_from": 3, "rules_flush_pct": 5, "rules_chase_h1_pct": 80},
+                "rules_alive_volume_m5": 2000, "rules_organic_buys_m5": 12, "rules_bundled_penalty": 0.5,
+                "rules_bundled_from": 3, "rules_flush_pct": 5, "rules_flush_max_pct": 30, "rules_chase_h1_pct": 80,
+                "rules_crash_h1_pct": 50},
     "executor": {"stack_pct": 8, "max_open": 2, "min_ticket_usd": 10.0, "below_min": "bump",
                  "recheck_liq_drop_pct": 20, "recheck_price_move_pct": 15, "confirm_min": 5,
                  "max_liq_pct": 2},
     "risk": {"poll_s": 15, "stop_pct": 6, "trail_start_pct": 20, "trail_pct": 12, "timeout_h": 3,
              "timeout_min_gain_pct": 5, "sold_wait_min": 2, "no_price_polls": 4, "backoff_429_s": 30,
-             "volatile_m5_pct": 15, "volatile_factor": 0.5},
+             "volatile_m5_pct": 15, "volatile_factor": 1, "runner_trail_pct": 30,
+             "pulled_liq_drop_pct": 50, "pulled_price_drop_pct": 50},
     "desk": {"mode": "PAPER", "paper_start_stack": 200, "report_time": "08:00", "notifier": "webpush",
              "rpc_url": "https://api.mainnet-beta.solana.com", "push_rejects": False,
              "fees_ref_discount": 0.10, "fomo_handle": "rogzyy3", "tz": "Europe/Istanbul"},
@@ -60,16 +63,18 @@ RANGES = {
     "scanner.min_liquidity_usd": (1000, 200000, 500), "scanner.max_top10_pct": (5, 60, 1),
     "scanner.max_h1_change_pct": (10, 300, 5), "scanner.poll_s": (15, 300, 5),
     "scanner.min_pool_age_min": (0, 60, 1), "scanner.max_wait_min": (10, 240, 5),
-    "scanner.runner_h24_pct": (50, 2000, 50), "auditor.max_dev_pct": (0, 20, 0.5),
+    "scanner.runner_h24_pct": (50, 2000, 50), "scanner.max_h1_drop_pct": (5, 95, 1),
+    "scanner.max_m5_drop_pct": (5, 95, 1), "scanner.max_from_high_pct": (5, 95, 1), "auditor.max_dev_pct": (0, 20, 0.5),
     "auditor.max_top10_pct": (5, 60, 1), "auditor.min_lp_locked_pct": (50, 100, 1),
     "auditor.min_pool_age_min": (0, 60, 1), "auditor.max_bundled": (1, 30, 1),
     "auditor.max_delegated_accounts": (1, 100, 1), "auditor.retries": (1, 10, 1),
     "auditor.retry_gap_s": (0, 30, 1), "auditor.graph_min_age_min": (0, 60, 1),
     "analyst.alive_min": (0, 1, 0.01), "analyst.organic_min": (0, 1, 0.01), "analyst.chase_max": (0, 1, 0.01),
     "analyst.score_min": (0, 100, 1), "analyst.timeout_s": (2, 60, 1), "analyst.state_max_chars": (500, 3000, 100),
-    "analyst.rules_alive_volume_h1": (1000, 200000, 1000), "analyst.rules_organic_buys_h1": (10, 1000, 10),
+    "analyst.rules_alive_volume_m5": (100, 50000, 100), "analyst.rules_organic_buys_m5": (1, 200, 1),
     "analyst.rules_bundled_penalty": (0, 1, 0.05), "analyst.rules_bundled_from": (1, 20, 1),
-    "analyst.rules_flush_pct": (1, 50, 1), "analyst.rules_chase_h1_pct": (10, 300, 5),
+    "analyst.rules_flush_pct": (1, 50, 1), "analyst.rules_flush_max_pct": (5, 90, 1),
+    "analyst.rules_chase_h1_pct": (10, 300, 5), "analyst.rules_crash_h1_pct": (10, 95, 1),
     "executor.stack_pct": (1, 50, 0.5), "executor.max_open": (1, 10, 1), "executor.min_ticket_usd": (5, 500, 0.5),
     "executor.recheck_liq_drop_pct": (1, 80, 1), "executor.recheck_price_move_pct": (1, 80, 1),
     "executor.confirm_min": (1, 60, 1), "executor.max_liq_pct": (0.1, 10, 0.1),
@@ -77,6 +82,7 @@ RANGES = {
     "risk.trail_pct": (1, 50, 0.5), "risk.timeout_h": (0.5, 48, 0.5), "risk.timeout_min_gain_pct": (0, 100, 1),
     "risk.sold_wait_min": (1, 30, 1), "risk.no_price_polls": (1, 20, 1), "risk.backoff_429_s": (5, 300, 5),
     "risk.volatile_m5_pct": (3, 100, 1), "risk.volatile_factor": (0.1, 1, 0.05),
+    "risk.runner_trail_pct": (5, 80, 1), "risk.pulled_liq_drop_pct": (10, 95, 1), "risk.pulled_price_drop_pct": (10, 95, 1),
     "desk.paper_start_stack": (10, 10000, 10), "desk.fees_ref_discount": (0, 0.5, 0.01),
 }
 
@@ -88,6 +94,9 @@ ALIASES = {"stop": "risk.stop_pct", "trail": "risk.trail_pct", "trail start": "r
            "top10": "scanner.max_top10_pct", "score": "analyst.score_min", "alive": "analyst.alive_min",
            "organic": "analyst.organic_min", "chase": "analyst.chase_max", "dev": "auditor.max_dev_pct",
            "bundled": "auditor.max_bundled", "report": "desk.report_time", "notifier": "desk.notifier"}
+
+# keys dropped from DEFAULTS; removed from old DBs at startup so the Account tab does not show dead sliders
+OBSOLETE = ("analyst.rules_alive_volume_h1", "analyst.rules_organic_buys_h1")
 
 AGENTS = ("scanner", "auditor", "analyst", "executor", "risk")
 

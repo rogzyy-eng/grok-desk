@@ -35,15 +35,15 @@ def test_gate_thresholds():
 def test_rules_mode_fake_dexscreener(db):
     bus = Bus(db)
     an = Analyst(db, bus, FakeSrc(), Notifier(db, bus), sleep=no_sleep)
-    # alive = vol_h1/25000, organic = buys_h1/150, flush = m5 <= -5% with buys > sells, chase = h1/80
-    at = {"vol_h1": 17500, "buys_h1": 97.5, "chg_m5": -6, "buys_m5": 30, "sells_m5": 10, "chg_h1": 24}
+    # alive = vol_m5/2000, organic = buys_m5/12, flush = -30% <= m5 <= -5% with buys > sells, chase = h1/80
+    at = {"vol_m5": 1400, "buys_m5": 30, "sells_m5": 10, "chg_m5": -6, "chg_h1": 24}
     out = asyncio.run(an.judge("M1", {**at}, {}))
-    assert out["answers"] == {"alive_6h": 0.7, "organic": 0.65, "flush": 1.0, "chase": 0.3} and out["passed"]
+    assert out["answers"] == {"alive_6h": 0.7, "organic": 1.0, "flush": 1.0, "chase": 0.3} and out["passed"]
     assert out["label"] == "Analyst (rules)"
-    for k, v in (("vol_h1", 17250), ("buys_h1", 96), ("chg_h1", 24.8)):
+    for k, v in (("vol_m5", 1380), ("buys_m5", 7), ("chg_h1", 24.8)):
         assert not asyncio.run(an.judge("M1", {**at, k: v}, {}))["passed"], k
     db.insert("coins", {"mint": "M2", "symbol": "RJ"})
-    an.src = FakeSrc(vol_h1=100)
+    an.src = FakeSrc(vol_m5=100)
     asyncio.run(an.process({"mint": "M2", "scanner": {}, "auditor": {}}))
     row = db.one("SELECT * FROM activity WHERE mint='M2'")
     assert row["title"] == "Rejected RJ" and row["subtitle"].startswith("Analyst (rules) · alive_6h") and row["value"] == "Skipped"

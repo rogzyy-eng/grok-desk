@@ -62,7 +62,12 @@ class DB:
         self.seed_settings()
 
     # extra columns added after the first install; ALTER only when missing (keeps existing DBs + open positions)
-    MIGRATIONS = {"positions": {"volatile": "INTEGER DEFAULT 0", "m5_change_pct": "REAL"}}
+    # 2026-11-12: entry liquidity, per-position risk snapshot, paper price impact, runner partial close
+    MIGRATIONS = {"positions": {"volatile": "INTEGER DEFAULT 0", "m5_change_pct": "REAL",
+                                "entry_liq_usd": "REAL", "trail_start_pct": "REAL", "trail_pct": "REAL", "timeout_h": "REAL",
+                                "runner_trail_pct": "REAL", "entry_impact_pct": "REAL", "market_entry_price": "REAL",
+                                "runner": "INTEGER DEFAULT 0", "partial_at": "REAL", "partial_qty": "REAL",
+                                "partial_price": "REAL", "partial_usd": "REAL", "partial_fee": "REAL", "last_liq_usd": "REAL"}}
 
     def migrate(self):
         for table, cols in self.MIGRATIONS.items():
@@ -98,6 +103,8 @@ class DB:
         for sec, vals in config.DEFAULTS.items():
             for k, v in vals.items():
                 self.x("INSERT OR IGNORE INTO settings VALUES(?,?,?)", (f"{sec}.{k}", json.dumps(v), now))
+        for k in config.OBSOLETE:
+            self.x("DELETE FROM settings WHERE key=?", (k,))
         for k, v in {"desk.paper_nights": 0, "desk.paper_since": None, "desk.paused_agents": [],
                      "desk.layer8_proof": None, "desk.last_night_closed": None, "desk.last_page_url": None,
                      "desk.layer8_down_kills": 0}.items():

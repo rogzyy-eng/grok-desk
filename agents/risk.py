@@ -1,5 +1,5 @@
 """AGENT 5 · RISK — guards every open position every [poll_s]. Exits at the polled price that fired
-it (even if it gapped past the line). Never moves a stop down; never waits for a bounce; can't be
+it (even if it gapped past the line). First trail hit sells half; the runner trails wider. Never moves a stop down; never waits for a bounce; can't be
 paused while a position is open."""
 import fees
 import fields
@@ -8,25 +8,34 @@ from notifier import sell_button
 from sources import FetchError
 
 
-SCALED = ("stop_pct", "trail_start_pct", "trail_pct", "timeout_h")
+SCALED = ("stop_pct", "trail_start_pct", "trail_pct", "timeout_h", "runner_trail_pct")
 
 
 def pos_cfg(p, c):
-    """Risk settings for one position: volatile ones (|m5 change| >= [volatile_m5_pct] at entry) use
-    stop/trail start/trail/timeout × [volatile_factor]; normal ones use the plain settings."""
-    if not p.get("volatile") or c.get("_scaled"):
+    """Risk settings for one position. Positions opened since 2026-11-12 carry a snapshot of stop / trail
+    start / trail / timeout / runner trail taken at open (volatile × factor already applied), so later
+    setting changes never touch them. Older positions (no snapshot) fall back to the live settings,
+    volatile ones × [volatile_factor]."""
+    if c.get("_pos"):
         return c
-    f = float(c.get("volatile_factor", 0.5))
-    return {**c, **{k: round(float(c[k]) * f, 4) for k in SCALED}, "_scaled": True}
+    if p.get("trail_pct") is not None:
+        snap = {k: float(p[k]) for k in SCALED if p.get(k) is not None}
+        return {**c, **snap, "_pos": True}
+    if not p.get("volatile"):
+        return {**c, "_pos": True}
+    f = float(c.get("volatile_factor", 1))
+    return {**c, **{k: round(float(c[k]) * f, 4) for k in SCALED if k in c}, "_pos": True}
 
 
 def lines(p, c):
-    """-> (stop_price, trail_line or None, exit_line, trail_active)."""
+    """-> (stop_price, trail_line or None, exit_line, trail_active). After the first trail hit sold half
+    (runner), the rest trails [runner_trail_pct] off the top."""
     c = pos_cfg(p, c)
     entry, peak = p["entry_price"], p["peak_price"] or p["entry_price"]
-    stop = p["stop_price"] if p["stop_price"] is not None else entry * (1 - p["stop_pct"] / 100)
+    stop = p["stop_price"] if p["stop_price"] is not None else entry * (1 - c["stop_pct"] / 100)
     active = bool(p["trail_active"]) or peak >= entry * (1 + c["trail_start_pct"] / 100)
-    trail = peak * (1 - c["trail_pct"] / 100) if active else None
+    tp = c.get("runner_trail_pct", 30) if p.get("runner") else c["trail_pct"]
+    trail = peak * (1 - tp / 100) if active else None
     return stop, trail, max(stop, trail or 0), active
 
 
@@ -43,21 +52,26 @@ def check_exit(p, price, now, c):
     return None
 
 
+def pulled(p, price, liq, c):
+    """Liquidity pulled: pool at 0, pool down > [pulled_liq_drop_pct] from entry, or price down
+    > [pulled_price_drop_pct] between two polls. -> reason text or None."""
+    if liq is not None:
+        if liq <= 0:
+            return "liquidity 0"
+        e = p.get("entry_liq_usd")
+        if e and liq < e * (1 - float(c.get("pulled_liq_drop_pct", 50)) / 100):
+            return f"liquidity {(liq / e - 1) * 100:.0f}% since entry"
+    prev = p.get("last_price")
+    if prev and price < prev * (1 - float(c.get("pulled_price_drop_pct", 50)) / 100):
+        return f"price {(price / prev - 1) * 100:.0f}% in one poll"
+    return None
+
+
 class Risk(Agent):
     name = "risk"
 
     def paused(self):
         return False if self.db.open_positions() else super().paused()
-
-    def tighten(self, p, c):
-        """A new stop setting applies to open positions only if it is tighter."""
-        s = float(pos_cfg(p, c)["stop_pct"])
-        if s < (p["stop_pct"] or 1e9):
-            new = p["entry_price"] * (1 - s / 100)
-            if new > (p["stop_price"] or 0):
-                self.db.update("positions", "id=?", (p["id"],), {"stop_pct": s, "stop_price": new})
-                p = {**p, "stop_pct": s, "stop_price": new}
-        return p
 
     async def tick(self, prices=None):
         c = self.cfg()
@@ -85,7 +99,6 @@ class Risk(Agent):
                                               "liquidity_usd": b["liq_usd"]})
         exits = []
         for p in pos:
-            p = self.tighten(p, c)
             name = self.db.coin_name(p["mint"])
             price = prices.get(p["mint"]) if isinstance(prices.get(p["mint"]), (int, float)) else None
             if isinstance(prices.get(p["mint"]), dict):
@@ -97,39 +110,98 @@ class Risk(Agent):
                 if n == c["no_price_polls"]:
                     await self.notifier.push("noprice", f"{name}: no price for 1 min", mint=p["mint"], buttons=[sell_button(p["mint"])])
                 continue
+            liq = liqs.get(p["mint"])
+            why_pulled = pulled(p, price, liq, c)          # reads the previous poll's last_price
             peak = max(p["peak_price"] or price, price)
-            p = {**p, "peak_price": peak, "last_price": price, "no_price_polls": 0}
+            p = {**p, "peak_price": peak, "last_price": price, "no_price_polls": 0,
+                 "last_liq_usd": liq if liq is not None else p.get("last_liq_usd")}
             stop, trail, exit_line, active = lines(p, c)
-            reason = "pulled" if liqs.get(p["mint"]) == 0 else check_exit(p, price, now, c)
+            reason = "pulled" if why_pulled else check_exit(p, price, now, c)
             self.db.update("positions", "id=?", (p["id"],), {"peak_price": peak, "last_price": price, "no_price_polls": 0,
-                                                             "trail_active": int(active), "exit_line": exit_line})
+                                                             "trail_active": int(active), "exit_line": exit_line,
+                                                             "last_liq_usd": p["last_liq_usd"]})
             self.log.info("%s price=%s peak=%s stop=%s trail=%s action=%s", p["mint"], price, peak, stop, trail, reason or "hold")
+            if reason == "trail" and not p.get("runner"):
+                half = await self.sell_half(p, price, liq, c)
+                if half:
+                    exits.append(half)
+                    continue
             if reason:
-                exits.append(await self.exit(p, price, reason, c))
+                exits.append(await self.exit(p, price, reason, c, liq=liq, detail=why_pulled))
         self.db.snapshot_balance(now)
         return exits
 
-    async def exit(self, p, price, reason, c):
+    def exit_liq(self, p, liq):
+        return liq if liq is not None else (p.get("last_liq_usd") or p.get("entry_liq_usd"))
+
+    def sell_value(self, p, qty, price, liq):
+        """-> (gross USD, impact %). PAPER pays constant-product price impact; LIVE is the polled price."""
+        if p["mode"] == "PAPER":
+            return fees.sell_impact(qty, price, self.exit_liq(p, liq))
+        return (qty or 0) * price, 0.0
+
+    async def sell_half(self, p, price, liq, c):
+        """First trail hit: sell half (FOMO fee on this side), keep the rest as a runner trailing
+        [runner_trail_pct] off the top. A half under FOMO's $5 minimum -> None (sell it all)."""
+        half = (p["qty"] or 0) / 2
+        if half * price < fees.MIN_TRADE:
+            return None
         now = self.clock()
         name = self.db.coin_name(p["mint"])
         disc = float(self.db.get("desk.fees_ref_discount", 0.10))
-        gross = (p["qty"] or 0) * price
-        xfee = fees.side_fee(max(gross, fees.MIN_TRADE), disc)
-        pnl = gross - xfee - p["size_usd"]
+        gross, imp = self.sell_value(p, half, price, liq)
+        pfee = fees.side_fee(max(gross, fees.MIN_TRADE), disc) if gross > 0 else 0.0
+        net = gross - pfee
+        pnl = net - p["size_usd"] / 2           # realised on the half
+        rt = pos_cfg(p, c).get("runner_trail_pct", 30)
+        self.db.update("positions", "id=?", (p["id"],), {
+            "runner": 1, "qty": p["qty"] - half, "partial_at": now, "partial_qty": half, "partial_price": price,
+            "partial_usd": round(net, 6), "partial_fee": round(pfee, 6),
+            "fees_usd": round((p["entry_fee"] or 0) + pfee, 6)})
+        if p["mode"] == "PAPER":
+            self.db.move_cash(net, f"paper sell half {name}: trail", "PAPER")
+        imp_txt = f" · impact {imp:.2f}%" if imp else ""
+        value = f"{'+' if pnl >= 0 else '-'}${abs(pnl):.2f}"
+        self.bus.activity("sold", p["mint"], "risk", f"Sold half {name}",
+                          f"Risk · trail hit, runner trails {rt:g}%{imp_txt}", value)
+        text = (f"Sold half {name}" if p["mode"] == "PAPER" else f"Sell half {name} on FOMO") + f" · {value} · rest trails {rt:g}%"
+        btn = sell_button(p["mint"])
+        await self.notifier.push("trail", text, mint=p["mint"], buttons=[btn])
+        out = {"agent": "risk", "mint": p["mint"], "name": name, "ts": iso(now), "reason": "partial",
+               "entryPrice": p["entry_price"], "exitPrice": price, "qty": half, "grossUsd": round(gross, 4),
+               "feeUsd": round(pfee, 4), "pnlUsd": round(pnl, 2), "impactPct": imp, "runnerTrailPct": rt,
+               "mode": p["mode"], "status": "partial", "link": btn["url"]}
+        self.decide(p["mint"], "partial", text, out)
+        self.log.info("partial %s", out)
+        return out
+
+    async def exit(self, p, price, reason, c, liq=None, detail=None):
+        now = self.clock()
+        name = self.db.coin_name(p["mint"])
+        disc = float(self.db.get("desk.fees_ref_discount", 0.10))
+        gross, imp = self.sell_value(p, p["qty"], price, liq)
+        xfee = fees.side_fee(max(gross, fees.MIN_TRADE), disc) if gross > 0 else 0.0
+        part = p.get("partial_usd") or 0
+        pfee = p.get("partial_fee") or 0
+        pnl = part + gross - xfee - p["size_usd"]
         pct = pnl / p["size_usd"] * 100 if p["size_usd"] else 0
-        sp = p["stop_pct"]
         c = pos_cfg(p, c)
+        sp = p["stop_pct"]
         vol = " (volatil)" if p.get("volatile") else ""
-        text = {"trail": f"Sold {name} · +${pnl:.2f} (+{pct:.1f}%)" if pnl >= 0 else f"Sold {name} · -${-pnl:.2f} ({pct:.1f}%)",
+        run = " (runner)" if p.get("runner") else ""
+        imp_txt = f" · impact {imp:.2f}%" if imp else ""
+        text = {"trail": (f"Sold {name}{run} · +${pnl:.2f} (+{pct:.1f}%)" if pnl >= 0 else f"Sold {name}{run} · -${-pnl:.2f} ({pct:.1f}%)"),
                 "stop": f"{name} hit the -{sp:g}% stop{vol} · -${abs(pnl):.2f}",
                 "timeout": f"Sell {name}, dead money · {pct:+.1f}% in {c['timeout_h']:g}h",
                 "pulled": f"{name}: liquidity pulled · sell now"}[reason]
-        sub = {"trail": "Risk · trailing stop", "stop": f"Risk · -{sp:g}% stop{vol}",
-               "timeout": f"Risk · timeout {c['timeout_h']:g}h", "pulled": "Risk · liquidity pulled"}[reason]
+        sub = {"trail": f"Risk · trailing stop{run}", "stop": f"Risk · -{sp:g}% stop{vol}",
+               "timeout": f"Risk · timeout {c['timeout_h']:g}h",
+               "pulled": "Risk · liquidity pulled" + (f" ({detail})" if detail else "")}[reason] + imp_txt
         value = f"{'+' if pnl >= 0 else '-'}${abs(pnl):.2f} / {pct:+.1f}%"
+        fees_total = round((p["entry_fee"] or 0) + pfee + xfee, 4)
         if p["mode"] == "PAPER":
             self.db.update("positions", "id=?", (p["id"],), {"status": "closed", "closed_at": now, "exit_price": price,
-                           "exit_reason": reason, "pnl_usd": round(pnl, 4), "fees_usd": round((p["entry_fee"] or 0) + xfee, 4)})
+                           "exit_reason": reason, "pnl_usd": round(pnl, 4), "fees_usd": fees_total})
             self.db.move_cash(gross - xfee, f"paper sell {name}: {reason}", "PAPER")
             status = "closed"
         else:
@@ -142,7 +214,8 @@ class Risk(Agent):
         await self.notifier.push(reason, text, mint=p["mint"], buttons=buttons)
         out = {"agent": "risk", "mint": p["mint"], "name": name, "ts": iso(now), "reason": reason,
                "entryPrice": p["entry_price"], "exitPrice": price, "peakPrice": p["peak_price"], "pnlUsd": round(pnl, 2),
-               "pct": round(pct, 2), "feesUsd": round((p["entry_fee"] or 0) + xfee, 2), "stopPct": sp, "volatile": bool(p.get("volatile")), "mode": p["mode"],
+               "pct": round(pct, 2), "feesUsd": round(fees_total, 2), "stopPct": sp, "volatile": bool(p.get("volatile")), "runner": bool(p.get("runner")),
+               "impactPct": imp, "mode": p["mode"],
                "status": status, "link": buttons[0]["url"]}
         self.decide(p["mint"], reason, text, out)
         self.log.info("exit %s", out)

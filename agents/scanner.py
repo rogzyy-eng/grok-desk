@@ -1,6 +1,6 @@
 """AGENT 1 · SCANNER — counts and cuts. Owns every coin that graduates off the pumpfun curve onto
 PumpSwap. ONE PumpPortal connection (subscribeMigration only). Kill on the first hit, in order:
-liquidity · top 10 · h1 change · copycat. Never changes a setting."""
+liquidity · crashed (h1/m5 drop, far under its recorded high) · top 10 · h1 change · copycat. Never changes a setting."""
 import asyncio
 import json
 import re
@@ -124,6 +124,9 @@ class Scanner(Agent):
         # kill on the first hit, in this order
         if (best["liq_usd"] or 0) < c["min_liquidity_usd"]:
             return self.kill(coin, f"liq ${money(best['liq_usd'])}", scan)
+        crash = self.crashed(mint, best, c)
+        if crash:
+            return self.kill(coin, crash, scan)
         report = None
         try:
             report = await self.with_retries(self.src.rc_report, mint)
@@ -151,6 +154,19 @@ class Scanner(Agent):
         self.log.info("pass %s %s", mint, json.dumps({k: v for k, v in out.items() if k != "scan"}))
         self.bus.publish("auditor", out)
         return "pass"
+
+    def crashed(self, mint, best, c):
+        """Crashed coins never reach the Auditor: a -50% hour, a -40% 5 minutes, or >60% under the
+        highest price this desk ever recorded for the mint (prices table)."""
+        h1, m5, px = best.get("chg_h1"), best.get("chg_m5"), best.get("price_usd")
+        if h1 is not None and h1 <= -abs(c.get("max_h1_drop_pct", 50)):
+            return f"crashed {h1:.0f}% in 1h"
+        if m5 is not None and m5 <= -abs(c.get("max_m5_drop_pct", 40)):
+            return f"crashed {m5:.0f}% in 5 min"
+        hi = (self.db.one("SELECT max(price) hi FROM prices WHERE mint=?", (mint,)) or {}).get("hi")
+        if hi and px and px < hi * (1 - c.get("max_from_high_pct", 60) / 100):
+            return f"crashed {(px / hi - 1) * 100:.0f}% from its high"
+        return None
 
     def kill(self, coin, reason, scan):
         if scan:

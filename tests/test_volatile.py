@@ -21,7 +21,7 @@ def buy(db, mint, chg_m5):
 def test_settings_defaults(db):
     import config
     c = db.section("risk")
-    assert c["volatile_m5_pct"] == 15 and c["volatile_factor"] == 0.5
+    assert c["volatile_m5_pct"] == 15 and c["volatile_factor"] == 1      # 2026-11-12: off by default
     assert config.RANGES["risk.volatile_m5_pct"] == (3, 100, 1)
     assert config.RANGES["risk.volatile_factor"] == (0.1, 1, 0.05)
     assert "volatile_h1_pct" not in c
@@ -29,12 +29,13 @@ def test_settings_defaults(db):
 
 def test_normal_vs_volatile_entry(db):
     db.set("executor.max_open", 4)
+    db.set("risk.volatile_factor", 0.5)
     pn, n = buy(db, "NORM", 5)
     pv, n2 = buy(db, "VOL", 20)
     pd, _ = buy(db, "DUMP", -18)                      # abs(): a -18% 5-min move is volatile too
     rn, rv, rd = (db.one("SELECT * FROM positions WHERE id=?", (i,)) for i in (pn, pv, pd))
-    assert rn["volatile"] == 0 and rn["stop_pct"] == 6 and abs(rn["stop_price"] - 0.94) < 1e-9
-    assert rv["volatile"] == 1 and rv["stop_pct"] == 3 and abs(rv["stop_price"] - 0.97) < 1e-9 and rv["m5_change_pct"] == 20
+    assert rn["volatile"] == 0 and rn["stop_pct"] == 6 and abs(rn["stop_price"] - rn["entry_price"] * 0.94) < 1e-9
+    assert rv["volatile"] == 1 and rv["stop_pct"] == 3 and abs(rv["stop_price"] - rv["entry_price"] * 0.97) < 1e-9 and rv["m5_change_pct"] == 20
     assert rd["volatile"] == 1
     assert "stop 6%" in n.sent[-1]["body"] and "volatil" not in n.sent[-1]["body"]
     assert "volatil" in n2.sent[-1]["body"] and "stop 3%" in n2.sent[-1]["body"]
@@ -44,14 +45,17 @@ def test_normal_vs_volatile_entry(db):
 
 
 def test_pos_cfg_halves_only_volatile(db):
+    db.set("risk.volatile_factor", 0.5)
     c = db.section("risk")
-    assert pos_cfg({"volatile": 0}, c) is c
-    v = pos_cfg({"volatile": 1}, c)
+    n = pos_cfg({"volatile": 0}, c)
+    assert (n["stop_pct"], n["trail_pct"]) == (6, 12)
+    v = pos_cfg({"volatile": 1}, c)                              # legacy position (no snapshot): live × factor
     assert (v["stop_pct"], v["trail_start_pct"], v["trail_pct"], v["timeout_h"]) == (3, 10, 6, 1.5)
     assert pos_cfg({"volatile": 1}, v) is v                    # never scaled twice
 
 
 def test_risk_exits_volatile_half(db):
+    db.set("risk.volatile_factor", 0.5)
     t = [100.0]
     n = Notifier(db, Bus(db))
     r = Risk(db, Bus(db), None, n, clock=lambda: t[0], sleep=no_sleep)
@@ -68,7 +72,7 @@ def test_risk_exits_volatile_half(db):
     db.insert("positions", {**base, "mint": "V2", "volatile": 1, "stop_pct": 3, "stop_price": 0.97})
     asyncio.run(r.tick({"N": 1.12, "V2": 1.12}))
     out = asyncio.run(r.tick({"N": 1.12 * 0.93, "V2": 1.12 * 0.93}))
-    assert [o["mint"] for o in out] == ["V2"] and out[0]["reason"] == "trail"
+    assert [o["mint"] for o in out] == ["V2"] and out[0]["reason"] == "partial"     # first trail hit sells half
     # timeout: volatile 1.5h, normal 3h
     db.insert("coins", {"mint": "V3", "symbol": "V3"})
     db.insert("positions", {**base, "mint": "V3", "volatile": 1, "stop_pct": 3, "stop_price": 0.97})

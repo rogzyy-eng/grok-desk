@@ -261,7 +261,8 @@ async def cmd_sold(desk, coin, args, source):
     price = p["exit_price"] or (last or {}).get("price") or p["entry_price"]
     gross = (p["qty"] or 0) * price
     xfee = fees.side_fee(max(gross, fees.MIN_TRADE), float(db.get("desk.fees_ref_discount", 0.10)))
-    pnl = gross - xfee - p["size_usd"]
+    pnl = (p.get("partial_usd") or 0) + gross - xfee - p["size_usd"]      # a runner already sold half
     db.update("positions", "id=?", (p["id"],), {"status": "closed", "closed_at": time.time(), "exit_price": price,
-              "exit_reason": p["exit_reason"] or "manual", "pnl_usd": round(pnl, 4), "fees_usd": round((p["entry_fee"] or 0) + xfee, 4)})
+              "exit_reason": p["exit_reason"] or "manual", "pnl_usd": round(pnl, 4),
+              "fees_usd": round((p["entry_fee"] or 0) + (p.get("partial_fee") or 0) + xfee, 4)})
     return {"ok": True, "text": f"{db.coin_name(m)} closed · {'+' if pnl >= 0 else '-'}${abs(pnl):.2f}. {links.coin_url(m)}"}

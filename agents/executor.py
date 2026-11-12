@@ -2,8 +2,9 @@
 PAPER: simulated fill with fees.py. LIVE: push [Buy on FOMO] + [Bought]; the position waits
 [confirm_min] for the tap, else it expires. Size = stack × [stack_pct]%, bumped to (or skipped
 under) [min_ticket_usd], capped at [max_liq_pct]% of pool liquidity ($40,000 → $800); a cap under the min ticket skips.
-Volatile coins (|5-min price change| >= risk.volatile_m5_pct at entry) are flagged on the position; Risk then uses
-stop/trail start/trail/timeout × risk.volatile_factor for them (normal coins: plain settings)."""
+The risk settings (stop/trail start/trail/timeout/runner trail) are snapshotted onto the position at open;
+volatile coins (|5-min price change| >= risk.volatile_m5_pct) get them × risk.volatile_factor. PAPER fills pay
+constant-product price impact (size / (liquidity/2)) on top of the FOMO fee."""
 import fees
 import fields
 import links
@@ -26,6 +27,16 @@ def size_ticket(stack, c, liq=None):
             if t < c["min_ticket_usd"]:
                 return None, f"pool too thin: {c['max_liq_pct']:g}% of ${liq:,.0f} liquidity = ${cap:.2f}, under ${c['min_ticket_usd']:.2f} min ticket"
     return t, note
+
+
+SNAPSHOT = ("stop_pct", "trail_start_pct", "trail_pct", "timeout_h", "runner_trail_pct")
+
+
+def risk_snapshot(rc, volatile):
+    """Risk lines frozen onto the position at open (later setting changes never move them).
+    Volatile coins get × risk.volatile_factor here, once."""
+    f = float(rc.get("volatile_factor", 1)) if volatile else 1.0
+    return {k: round(float(rc[k]) * f, 4) for k in SNAPSHOT}
 
 
 def skip_warning(db):
@@ -82,22 +93,26 @@ class Executor(Agent):
         size, note = size_ticket(stack_now(self.db), c, p1.get("liq_usd"))
         if size is None:
             return self._skip(mint, note)
-        price = p1["price_usd"]
+        market = p1["price_usd"]
+        liq = p1.get("liq_usd")
         fee = fees.side_fee(size, float(self.db.get("desk.fees_ref_discount", 0.10)))
         rc = self.db.section("risk")
         m5 = p1.get("chg_m5")
         volatile = m5 is not None and abs(float(m5)) >= float(rc.get("volatile_m5_pct", 15))
-        stop_pct = round(float(rc["stop_pct"]) * (float(rc.get("volatile_factor", 0.5)) if volatile else 1), 4)
+        snap = risk_snapshot(rc, volatile)
+        stop_pct = snap["stop_pct"]
         risk_note = (f"volatil (5dk {float(m5):+.0f}%) · stop {stop_pct:g}%" if volatile else f"stop {stop_pct:g}%")
-        note = f"{note} · {risk_note}"
+        price, impact = (fees.buy_impact(size - fee, market, liq) if mode == "PAPER" else (market, 0.0))
+        note = f"{note} · {risk_note}" + (f" · impact {impact:.2f}%" if impact else "")
         link = links.coin_url(mint, "solana")
         sid = self.db.insert("signals", {"mint": mint, "ts": now, "price": price, "size_usd": size, "stack_pct": c["stack_pct"],
                                          "link": link, "mode": mode, "status": "filled" if mode == "PAPER" else "pending",
                                          "side": "buy", "reason": note})
         pos = {"mint": mint, "opened_at": now, "entry_price": price, "size_usd": size, "peak_price": price,
-               "stop_pct": stop_pct, "stop_price": price * (1 - stop_pct / 100), "trail_active": 0, "mode": mode,
+               **snap, "stop_price": price * (1 - stop_pct / 100), "trail_active": 0, "mode": mode,
                "entry_fee": fee, "fees_usd": fee, "last_price": price, "signal_id": sid,
-               "volatile": int(volatile), "m5_change_pct": None if m5 is None else float(m5)}
+               "volatile": int(volatile), "m5_change_pct": None if m5 is None else float(m5),
+               "entry_liq_usd": liq, "last_liq_usd": liq, "market_entry_price": market, "entry_impact_pct": impact}
         if mode == "PAPER":
             pid = self.db.insert("positions", {**pos, "status": "open", "qty": (size - fee) / price})
             self.db.move_cash(-size, f"paper buy {name} #{pid}", "PAPER")

@@ -49,6 +49,7 @@ def test_full_replay(db):
     asyncio.run(sc.tick())
     assert db.one("SELECT reason FROM scans ORDER BY id DESC")["reason"].startswith("pool")
     db.set("scanner.min_liquidity_usd", 5000)        # the real sample has $6,994 — let it through to test the rest
+    db.set("scanner.max_h1_drop_pct", 95); db.set("scanner.max_m5_drop_pct", 95)            # the real sample is -69% in 1h (crashed) — let it through too
     t[0] = CREATED / 1000 + 12 * 60
     asyncio.run(sc.tick())
     ev = to_auditor.get_nowait()
@@ -74,6 +75,10 @@ def test_kill_reasons_and_copycat(db):
     asyncio.run(sc.tick())
     assert db.one("SELECT status_reason FROM coins WHERE mint=?", (MINT,))["status_reason"] == "liq $7.0K"
     db.set("scanner.min_liquidity_usd", 5000)
+    db.x("UPDATE coins SET status='waiting' WHERE mint=?", (MINT,)); db.x("DELETE FROM skips")
+    asyncio.run(sc.tick())
+    assert db.one("SELECT status_reason FROM coins WHERE mint=?", (MINT,))["status_reason"] == "crashed -69% in 1h"   # the real sample
+    db.set("scanner.max_h1_drop_pct", 95); db.set("scanner.max_m5_drop_pct", 95)
     db.x("UPDATE coins SET status='waiting' WHERE mint=?", (MINT,)); db.x("DELETE FROM skips")
     asyncio.run(sc.tick())
     assert db.one("SELECT status_reason FROM coins WHERE mint=?", (MINT,))["status_reason"] == "copycat of CYBRON"

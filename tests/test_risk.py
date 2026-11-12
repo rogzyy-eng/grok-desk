@@ -1,5 +1,6 @@
 """3 test_risk — +25% then 13% off the top = trail; -6.1% = stop; 3h at +4% = timeout; loosening the
-stop never moves an open stop down; "set stop to -8%" → new position reads -8%, the old one -6%."""
+stop never moves an open stop down; "set stop to -8%" → new position reads -8%, the old one -6%.
+Since 2026-11-12 the first trail hit sells half and the runner trails 30%; open stops are a snapshot."""
 import asyncio
 
 import commands
@@ -35,9 +36,14 @@ def test_trail_stop_timeout(db):
     asyncio.run(r.tick({"TR": 1.25, "ST": 0.95}))
     out = asyncio.run(r.tick({"TR": 1.25 * 0.87, "ST": 0.939}))   # 13% off the top; -6.1%
     reasons = {o["mint"]: o for o in out}
-    assert reasons["TR"]["reason"] == "trail" and reasons["ST"]["reason"] == "stop"
+    assert reasons["TR"]["reason"] == "partial" and reasons["ST"]["reason"] == "stop"   # first trail hit sells half
     assert reasons["TR"]["exitPrice"] == 1.25 * 0.87                # exit at the polled price
-    assert any(s["body"].startswith("PAPER · Sold TR · +$") for s in n.sent if s.get("body"))
+    assert any(s["body"].startswith("PAPER · Sold half TR · +$") for s in n.sent if s.get("body"))
+    assert asyncio.run(r.tick({"TR": 2.0})) == []                  # the runner keeps riding
+    assert asyncio.run(r.tick({"TR": 2.0 * 0.71})) == []           # 29% off the top still holds (30% runner trail)
+    out = asyncio.run(r.tick({"TR": 2.0 * 0.69}))
+    assert out[0]["reason"] == "trail" and out[0]["runner"] is True
+    assert any(s["body"].startswith("PAPER · Sold TR (runner) · ") for s in n.sent if s.get("body"))
     assert any(s["body"] == f"PAPER · ST hit the -6% stop · -${abs(reasons['ST']['pnlUsd']):.2f}" for s in n.sent if s.get("body"))
     open_pos(db, "TO", t=100)
     t[0] = 100 + 3 * 3600
@@ -60,7 +66,7 @@ def test_stop_never_loosens_and_set_stop_8(db):
     assert db.one("SELECT stop_pct FROM positions WHERE id=?", (pid,))["stop_pct"] == 8
     asyncio.run(r.tick({"OLD": 0.99, "NEW": 0.919}))                     # -8.1%
     assert any(s["body"].startswith("PAPER · NEW hit the -8% stop") for s in n.sent if s.get("body"))
-    assert db.one("SELECT subtitle FROM activity WHERE mint='NEW' AND kind='stopped'")["subtitle"] == "Risk · -8% stop"
+    assert db.one("SELECT subtitle FROM activity WHERE mint='NEW' AND kind='stopped'")["subtitle"].startswith("Risk · -8% stop · impact ")
     assert db.one("SELECT stop_pct FROM positions WHERE id=?", (old,))["stop_pct"] == 6
     from main import Desk
     from fastapi.testclient import TestClient
@@ -70,9 +76,9 @@ def test_stop_never_loosens_and_set_stop_8(db):
     c = TestClient(make_app(Desk(db=db, src=FakeSrc())))
     risk_card = [a for a in c.get("/api/agents", headers={"Authorization": "Bearer " + "Z" * 40}).json()["agents"] if a["name"] == "risk"][0]
     assert "stop -8%" in risk_card["pills"]
-    commands.set_setting(db, "stop", "-5%")                              # tighter → applies to open ones
+    commands.set_setting(db, "stop", "-5%")                              # snapshot: open positions keep their stop
     asyncio.run(r.tick({"OLD": 0.99}))
-    assert db.one("SELECT stop_pct FROM positions WHERE id=?", (old,))["stop_pct"] == 5
+    assert db.one("SELECT stop_pct FROM positions WHERE id=?", (old,))["stop_pct"] == 6
 
 
 def test_no_price_never_invented_and_pulled(db):

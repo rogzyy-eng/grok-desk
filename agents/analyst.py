@@ -35,14 +35,22 @@ def build_state(name, age, p, au, max_chars=3000):
 
 
 def rules_answers(p, bundled, c):
-    """Rules mode (Jev skipped): same 4 answers, 0..1, from fake-able DexScreener numbers."""
-    alive = min(1.0, (p.get("vol_h1") or 0) / c["rules_alive_volume_h1"])
-    organic = min(1.0, (p.get("buys_h1") or 0) / c["rules_organic_buys_h1"])
+    """Rules mode (Jev skipped): same 4 answers, 0..1, from fake-able DexScreener numbers.
+    alive/organic read the 5-min window (a snipe lives in minutes; the 1h window was mostly history).
+    flush = a -5%..-30% 5-min dip with buys > sells (a deeper drop is a dump, not a flush).
+    chase = run-up over the hour; a crash (h1 < -rules_crash_h1_pct) is penalised as fully as a chase."""
+    alive = min(1.0, (p.get("vol_m5") or 0) / c.get("rules_alive_volume_m5", 2000))
+    organic = min(1.0, (p.get("buys_m5") or 0) / c.get("rules_organic_buys_m5", 12))
     if (bundled or 0) >= c["rules_bundled_from"]:
         organic *= c["rules_bundled_penalty"]
     m5 = p.get("chg_m5") or 0
-    flush = 1.0 if m5 <= -abs(c["rules_flush_pct"]) and (p.get("buys_m5") or 0) > (p.get("sells_m5") or 0) else 0.0
-    chase = min(1.0, max(0.0, p.get("chg_h1") or 0) / c["rules_chase_h1_pct"])
+    lo, hi = abs(c["rules_flush_pct"]), abs(c.get("rules_flush_max_pct", 30))
+    flush = 1.0 if -hi <= m5 <= -lo and (p.get("buys_m5") or 0) > (p.get("sells_m5") or 0) else 0.0
+    h1 = p.get("chg_h1") or 0
+    if h1 < -abs(c.get("rules_crash_h1_pct", 50)):
+        chase = 1.0
+    else:
+        chase = min(1.0, max(0.0, h1) / c["rules_chase_h1_pct"])
     return {"alive_6h": round(alive, 2), "organic": round(organic, 2), "flush": round(flush, 2), "chase": round(chase, 2)}
 
 
