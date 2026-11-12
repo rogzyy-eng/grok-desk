@@ -12,6 +12,7 @@ from fastapi.staticfiles import StaticFiles
 import commands
 import config
 import links
+from agents.risk import pos_cfg
 import report
 import telegram
 import webpush
@@ -58,7 +59,7 @@ def make_app(desk):
                 "value_usd": round((p["qty"] or 0) * lp, 4), "last": lp,
                 "upnl_pct": round((lp / p["entry_price"] - 1) * 100, 2) if p["entry_price"] else None,
                 "stop_line": stop, "trail_line": trail, "exit_line": exit_line,
-                "timeout_left_s": max(0, p["opened_at"] + float(db.get("risk.timeout_h")) * 3600 - time.time()),
+                "timeout_left_s": max(0, p["opened_at"] + float(pos_cfg(p, db.section("risk"))["timeout_h"]) * 3600 - time.time()),
                 "link": links.coin_url(p["mint"], c.get("chain") or "solana")}
 
     def agent_cards():

@@ -48,7 +48,8 @@ DEFAULTS = {
                  "recheck_liq_drop_pct": 20, "recheck_price_move_pct": 15, "confirm_min": 5,
                  "max_liq_pct": 2},
     "risk": {"poll_s": 15, "stop_pct": 6, "trail_start_pct": 20, "trail_pct": 12, "timeout_h": 3,
-             "timeout_min_gain_pct": 5, "sold_wait_min": 2, "no_price_polls": 4, "backoff_429_s": 30},
+             "timeout_min_gain_pct": 5, "sold_wait_min": 2, "no_price_polls": 4, "backoff_429_s": 30,
+             "volatile_m5_pct": 15, "volatile_factor": 0.5},
     "desk": {"mode": "PAPER", "paper_start_stack": 200, "report_time": "08:00", "notifier": "webpush",
              "rpc_url": "https://api.mainnet-beta.solana.com", "push_rejects": False,
              "fees_ref_discount": 0.10, "fomo_handle": "rogzyy3", "tz": "Europe/Istanbul"},
@@ -75,6 +76,7 @@ RANGES = {
     "risk.poll_s": (5, 120, 1), "risk.stop_pct": (1, 50, 0.5), "risk.trail_start_pct": (1, 200, 1),
     "risk.trail_pct": (1, 50, 0.5), "risk.timeout_h": (0.5, 48, 0.5), "risk.timeout_min_gain_pct": (0, 100, 1),
     "risk.sold_wait_min": (1, 30, 1), "risk.no_price_polls": (1, 20, 1), "risk.backoff_429_s": (5, 300, 5),
+    "risk.volatile_m5_pct": (3, 100, 1), "risk.volatile_factor": (0.1, 1, 0.05),
     "desk.paper_start_stack": (10, 10000, 10), "desk.fees_ref_discount": (0, 0.5, 0.01),
 }
 

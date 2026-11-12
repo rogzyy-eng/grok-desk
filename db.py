@@ -58,7 +58,18 @@ class DB:
         self.cx.execute("PRAGMA synchronous=NORMAL")
         self.cx.execute("PRAGMA busy_timeout=5000")
         self.cx.executescript(SCHEMA)
+        self.migrate()
         self.seed_settings()
+
+    # extra columns added after the first install; ALTER only when missing (keeps existing DBs + open positions)
+    MIGRATIONS = {"positions": {"volatile": "INTEGER DEFAULT 0", "m5_change_pct": "REAL"}}
+
+    def migrate(self):
+        for table, cols in self.MIGRATIONS.items():
+            have = {r[1] for r in self.cx.execute(f"PRAGMA table_info({table})").fetchall()}
+            for col, typ in cols.items():
+                if col not in have:
+                    self.cx.execute(f"ALTER TABLE {table} ADD COLUMN {col} {typ}")
 
     def x(self, sql, args=()):
         with self.lock:

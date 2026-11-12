@@ -8,8 +8,21 @@ from notifier import sell_button
 from sources import FetchError
 
 
+SCALED = ("stop_pct", "trail_start_pct", "trail_pct", "timeout_h")
+
+
+def pos_cfg(p, c):
+    """Risk settings for one position: volatile ones (|m5 change| >= [volatile_m5_pct] at entry) use
+    stop/trail start/trail/timeout × [volatile_factor]; normal ones use the plain settings."""
+    if not p.get("volatile") or c.get("_scaled"):
+        return c
+    f = float(c.get("volatile_factor", 0.5))
+    return {**c, **{k: round(float(c[k]) * f, 4) for k in SCALED}, "_scaled": True}
+
+
 def lines(p, c):
     """-> (stop_price, trail_line or None, exit_line, trail_active)."""
+    c = pos_cfg(p, c)
     entry, peak = p["entry_price"], p["peak_price"] or p["entry_price"]
     stop = p["stop_price"] if p["stop_price"] is not None else entry * (1 - p["stop_pct"] / 100)
     active = bool(p["trail_active"]) or peak >= entry * (1 + c["trail_start_pct"] / 100)
@@ -18,6 +31,7 @@ def lines(p, c):
 
 
 def check_exit(p, price, now, c):
+    c = pos_cfg(p, c)
     stop, trail, _, active = lines(p, c)
     if price <= stop:
         return "stop"
@@ -37,7 +51,7 @@ class Risk(Agent):
 
     def tighten(self, p, c):
         """A new stop setting applies to open positions only if it is tighter."""
-        s = float(c["stop_pct"])
+        s = float(pos_cfg(p, c)["stop_pct"])
         if s < (p["stop_pct"] or 1e9):
             new = p["entry_price"] * (1 - s / 100)
             if new > (p["stop_price"] or 0):
@@ -104,11 +118,13 @@ class Risk(Agent):
         pnl = gross - xfee - p["size_usd"]
         pct = pnl / p["size_usd"] * 100 if p["size_usd"] else 0
         sp = p["stop_pct"]
+        c = pos_cfg(p, c)
+        vol = " (volatil)" if p.get("volatile") else ""
         text = {"trail": f"Sold {name} · +${pnl:.2f} (+{pct:.1f}%)" if pnl >= 0 else f"Sold {name} · -${-pnl:.2f} ({pct:.1f}%)",
-                "stop": f"{name} hit the -{sp:g}% stop · -${abs(pnl):.2f}",
+                "stop": f"{name} hit the -{sp:g}% stop{vol} · -${abs(pnl):.2f}",
                 "timeout": f"Sell {name}, dead money · {pct:+.1f}% in {c['timeout_h']:g}h",
                 "pulled": f"{name}: liquidity pulled · sell now"}[reason]
-        sub = {"trail": "Risk · trailing stop", "stop": f"Risk · -{sp:g}% stop",
+        sub = {"trail": "Risk · trailing stop", "stop": f"Risk · -{sp:g}% stop{vol}",
                "timeout": f"Risk · timeout {c['timeout_h']:g}h", "pulled": "Risk · liquidity pulled"}[reason]
         value = f"{'+' if pnl >= 0 else '-'}${abs(pnl):.2f} / {pct:+.1f}%"
         if p["mode"] == "PAPER":
@@ -126,7 +142,7 @@ class Risk(Agent):
         await self.notifier.push(reason, text, mint=p["mint"], buttons=buttons)
         out = {"agent": "risk", "mint": p["mint"], "name": name, "ts": iso(now), "reason": reason,
                "entryPrice": p["entry_price"], "exitPrice": price, "peakPrice": p["peak_price"], "pnlUsd": round(pnl, 2),
-               "pct": round(pct, 2), "feesUsd": round((p["entry_fee"] or 0) + xfee, 2), "stopPct": sp, "mode": p["mode"],
+               "pct": round(pct, 2), "feesUsd": round((p["entry_fee"] or 0) + xfee, 2), "stopPct": sp, "volatile": bool(p.get("volatile")), "mode": p["mode"],
                "status": status, "link": buttons[0]["url"]}
         self.decide(p["mint"], reason, text, out)
         self.log.info("exit %s", out)

@@ -1,7 +1,9 @@
 """AGENT 4 · EXECUTOR — sizes and opens. NEVER places an order on FOMO.
 PAPER: simulated fill with fees.py. LIVE: push [Buy on FOMO] + [Bought]; the position waits
 [confirm_min] for the tap, else it expires. Size = stack × [stack_pct]%, bumped to (or skipped
-under) [min_ticket_usd], capped at [max_liq_pct]% of pool liquidity ($40,000 → $800); a cap under the min ticket skips."""
+under) [min_ticket_usd], capped at [max_liq_pct]% of pool liquidity ($40,000 → $800); a cap under the min ticket skips.
+Volatile coins (|5-min price change| >= risk.volatile_m5_pct at entry) are flagged on the position; Risk then uses
+stop/trail start/trail/timeout × risk.volatile_factor for them (normal coins: plain settings)."""
 import fees
 import fields
 import links
@@ -82,22 +84,28 @@ class Executor(Agent):
             return self._skip(mint, note)
         price = p1["price_usd"]
         fee = fees.side_fee(size, float(self.db.get("desk.fees_ref_discount", 0.10)))
-        stop_pct = float(self.db.get("risk.stop_pct"))
+        rc = self.db.section("risk")
+        m5 = p1.get("chg_m5")
+        volatile = m5 is not None and abs(float(m5)) >= float(rc.get("volatile_m5_pct", 15))
+        stop_pct = round(float(rc["stop_pct"]) * (float(rc.get("volatile_factor", 0.5)) if volatile else 1), 4)
+        risk_note = (f"volatil (5dk {float(m5):+.0f}%) · stop {stop_pct:g}%" if volatile else f"stop {stop_pct:g}%")
+        note = f"{note} · {risk_note}"
         link = links.coin_url(mint, "solana")
         sid = self.db.insert("signals", {"mint": mint, "ts": now, "price": price, "size_usd": size, "stack_pct": c["stack_pct"],
                                          "link": link, "mode": mode, "status": "filled" if mode == "PAPER" else "pending",
                                          "side": "buy", "reason": note})
         pos = {"mint": mint, "opened_at": now, "entry_price": price, "size_usd": size, "peak_price": price,
                "stop_pct": stop_pct, "stop_price": price * (1 - stop_pct / 100), "trail_active": 0, "mode": mode,
-               "entry_fee": fee, "fees_usd": fee, "last_price": price, "signal_id": sid}
+               "entry_fee": fee, "fees_usd": fee, "last_price": price, "signal_id": sid,
+               "volatile": int(volatile), "m5_change_pct": None if m5 is None else float(m5)}
         if mode == "PAPER":
             pid = self.db.insert("positions", {**pos, "status": "open", "qty": (size - fee) / price})
             self.db.move_cash(-size, f"paper buy {name} #{pid}", "PAPER")
             self.bus.activity("bought", mint, "executor", f"Bought {name}", f"Executor · {note}", f"${size:.2f}")
-            await self.notifier.push("bought", f"Bought {name} · ${size:.2f}", mint=mint, buttons=[buy_button(mint)])
+            await self.notifier.push("bought", f"Bought {name} · ${size:.2f} · {risk_note}", mint=mint, buttons=[buy_button(mint)])
         else:
             pid = self.db.insert("positions", {**pos, "status": "pending", "qty": 0})
-            await self.notifier.push("buy", f"Buy {name} · ${size:.2f}", mint=mint,
+            await self.notifier.push("buy", f"Buy {name} · ${size:.2f} · {risk_note}", mint=mint,
                                      buttons=[buy_button(mint), {"label": "Bought", "action": "bought", "mint": mint}])
         self.decide(mint, "open" if mode == "PAPER" else "signal", f"{mode} ${size:.2f} @ {price:.8g} · {note}")
         self.log.info("%s %s size=%.2f price=%s fee=%.4f %s", mode, mint, size, price, fee, note)

@@ -137,7 +137,7 @@ async def handle(desk, text, source="app"):
             btns, lines = [], [f"{s['mode']} · balance ${s['balance']:.2f} · {s['open_positions']} open"]
             for p in db.open_positions():
                 n = db.coin_name(p["mint"])
-                lines.append(f"{n} ${p['size_usd']:.2f} · stop -{p['stop_pct']:g}% · {links.coin_url(p['mint'])}")
+                lines.append(f"{n} ${p['size_usd']:.2f} · stop -{p['stop_pct']:g}%{' · volatil' if p.get('volatile') else ''} · {links.coin_url(p['mint'])}")
                 btns.append(sell_button(p["mint"]))
             return {"ok": True, "text": "\n".join(lines), "buttons": btns, "data": s}
         if cmd in ("pause", "resume"):
