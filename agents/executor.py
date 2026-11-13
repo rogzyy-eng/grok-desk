@@ -6,7 +6,10 @@ Size = stack × [stack_pct]%, bumped to (or skipped
 under) [min_ticket_usd], capped at [max_liq_pct]% of pool liquidity ($40,000 → $800); a cap under the min ticket skips.
 The risk settings (stop/trail start/trail/timeout/runner trail, plus tp_pct / tp_sell_frac) are snapshotted onto the position at open;
 volatile coins (|5-min price change| >= risk.volatile_m5_pct) get them × risk.volatile_factor. PAPER fills pay
-constant-product price impact (size / (liquidity/2)) on top of the FOMO fee."""
+constant-product price impact (size / (liquidity/2)) on top of the FOMO fee.
+Entry price (2026-11-13): the pool's on-chain price is read once just before the buy (onchain.read_price). Zincir more
+than [entry_max_gap_pct] under DexScreener -> skip; otherwise the fill (and stop / trail / take-profit) uses the
+on-chain price; unsupported pool / RPC failure -> DexScreener price as before."""
 import fees
 import fields
 import links
@@ -147,8 +150,12 @@ class Executor(Agent):
         size, note = size_ticket(stack_now(self.db), c, p1.get("liq_usd"))
         if size is None:
             return self._skip(mint, note)
-        market = p1["price_usd"]
+        dex_market = p1["price_usd"]
         liq = p1.get("liq_usd")
+        chain = await self.entry_chain_price(mint, p1, c)
+        if chain.get("skip"):
+            return self._skip(mint, chain["skip"])
+        market = chain.get("usd") or dex_market
         fee = fees.side_fee(size, float(self.db.get("desk.fees_ref_discount", 0.10)))
         rc = self.db.section("risk")
         m5 = p1.get("chg_m5")
@@ -157,7 +164,7 @@ class Executor(Agent):
         stop_pct = snap["stop_pct"]
         risk_note = (f"volatil (5dk {float(m5):+.0f}%) · stop {stop_pct:g}%" if volatile else f"stop {stop_pct:g}%")
         price, impact = (fees.buy_impact(size - fee, market, liq) if mode == "PAPER" else (market, 0.0))
-        note = f"{note} · {risk_note}" + (f" · impact {impact:.2f}%" if impact else "")
+        note = f"{note} · {risk_note}" + (f" · impact {impact:.2f}%" if impact else "") + f" · fiyat: {chain['note']}"
         link = links.coin_url(mint, "solana")
         sid = self.db.insert("signals", {"mint": mint, "ts": now, "price": price, "size_usd": size, "stack_pct": c["stack_pct"],
                                          "link": link, "mode": mode, "status": "filled" if mode == "PAPER" else "pending",
@@ -166,7 +173,9 @@ class Executor(Agent):
                **snap, "stop_price": price * (1 - stop_pct / 100), "trail_active": 0, "mode": mode,
                "entry_fee": fee, "fees_usd": fee, "last_price": price, "signal_id": sid,
                "volatile": int(volatile), "m5_change_pct": None if m5 is None else float(m5),
-               "entry_liq_usd": liq, "last_liq_usd": liq, "market_entry_price": market, "entry_impact_pct": impact}
+               "entry_liq_usd": liq, "last_liq_usd": liq, "market_entry_price": market, "entry_impact_pct": impact,
+               "price_source": "zincir" if chain.get("usd") else "DexScreener", "dex_entry_price": dex_market,
+               "entry_native": chain.get("native"), "entry_quote_usd": chain.get("quote_usd"), "entry_gap_pct": chain.get("gap")}
         if mode == "PAPER":
             pid = self.db.insert("positions", {**pos, "status": "open", "qty": (size - fee) / price})
             self.db.move_cash(-size, f"paper buy {name} #{pid}", "PAPER")
@@ -179,6 +188,43 @@ class Executor(Agent):
         self.decide(mint, "open" if mode == "PAPER" else "signal", f"{mode} ${size:.2f} @ {price:.8g} · {note}")
         self.log.info("%s %s size=%.2f price=%s fee=%.4f %s", mode, mint, size, price, fee, note)
         return pid
+
+    async def entry_chain_price(self, mint, p1, c):
+        """On-chain price of the pool once, right before the buy (onchain.read_price).
+        -> {"skip": text} when zincir is more than [entry_max_gap_pct] under DexScreener (0 = off);
+        {"usd", "native", "quote_usd", "gap", "kind", "note"} to fill at the on-chain price;
+        {"note"} only (DexScreener fill) when the pool is unsupported or the RPC fails."""
+        from onchain import read_price
+        rpc = getattr(self.src, "rpc", None)
+        if self.db.get("risk.price_source", "auto") != "auto" or rpc is None:
+            return {"note": "DexScreener"}
+        pool = p1.get("pair_address") or (self.db.one("SELECT pool FROM coins WHERE mint=?", (mint,)) or {}).get("pool")
+        dex_usd, dex_native = p1.get("price_usd"), p1.get("price_native")
+        if not pool or not dex_usd or not dex_native:
+            return self._chain_fallback(mint, "DexScreener priceNative / pool missing")
+        try:
+            got, why = await read_price(rpc, pool, mint, sleep=self.sleep)
+        except Exception as e:                   # never let the entry read kill a buy
+            got, why = None, type(e).__name__
+        if not got:
+            return self._chain_fallback(mint, why)
+        gap = (got["price_native"] / float(dex_native) - 1) * 100
+        lim = float(c.get("entry_max_gap_pct", 15) or 0)
+        name = self.db.coin_name(mint)
+        if lim > 0 and gap < -lim:
+            return {"skip": f"fiyat uyuşmazlığı: zincir %{-gap:.0f} düşük → girmedim"}
+        quote_usd = float(dex_usd) / float(dex_native)
+        usd = got["price_native"] * quote_usd
+        self.decide(mint, "entry_price", f"{name}: zincir fiyatı DexScreener'a göre {gap:+.1f}% ({got['kind']}) · zincir fiyatından girildi",
+                    {"kind": got["kind"], "chainNative": got["price_native"], "dexNative": float(dex_native), "gapPct": round(gap, 2)})
+        return {"usd": usd, "native": got["price_native"], "quote_usd": quote_usd, "gap": round(gap, 2), "kind": got["kind"],
+                "note": f"zincir ({got['kind']}, Dex'e göre {gap:+.1f}%)"}
+
+    def _chain_fallback(self, mint, why):
+        self.log.info("%s entry on-chain price unavailable (%s) -> DexScreener", mint, why)
+        self.decide(mint, "entry_price", f"{self.db.coin_name(mint)}: zincir fiyatı okunamadı ({why}) · DexScreener fiyatından girildi",
+                    {"reason": why})
+        return {"note": "DexScreener (zincir okunamadı)"}
 
     async def expire_pending(self):
         """LIVE: no [Bought] tap within [confirm_min] → the signal expires (nothing was bought).

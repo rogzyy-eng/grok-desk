@@ -129,6 +129,9 @@ def rug_early(st, now, c):
     the largest non-pool wallet sold > [rug_top_holder_sell_pct] of what it held at our entry."""
     if st is None:
         return None
+    gap = getattr(st, "gap_exit", None)            # distrusted zincir price far under DexScreener (ws_price)
+    if gap:
+        return gap
     drop = fast_drain(st.hist, now, float(c.get("rug_window_s", 20)), float(c.get("rug_liq_drop_fast_pct", 25)))
     if drop is not None:
         return f"havuzdaki SOL {drop:.0f}% / {float(c.get('rug_window_s', 20)):g}sn"
@@ -197,25 +200,52 @@ class Risk(Agent):
             self.log.info("%s ws watch failed (%s); polling", mint, type(e).__name__)
 
     def ws_price(self, p, c):
-        """-> (price_usd, liq_usd, state) when a trusted on-chain price exists, else None (DexScreener)."""
+        """-> (price_usd, liq_usd, state) when a trusted on-chain price exists, else None (DexScreener).
+        First on-chain price = sanity check. A position filled at the on-chain price (entry_native set) is also
+        trusted when the socket agrees with that fill within [ws_max_diff_pct] (both are zincir, so a stale
+        DexScreener price does not reject it); its quote USD comes from the fill until DexScreener is polled.
+        Distrusted and zincir >= [zincir_gap_exit_pct] under DexScreener -> (zincir price, liq, state) with
+        state.gap_exit set: rug_early sells at once instead of riding DexScreener."""
         w = self.watcher
         if w is None or not w.connected or c.get("price_source", "auto") != "auto":
             return None
         st = w.state(p["mint"])
-        if st is None or st.price_native is None or not st.quote_usd:
+        if st is None or st.price_native is None:
             return None
-        if st.trusted is None:                 # first on-chain price: sanity check against DexScreener
-            if not st.dex_native:
+        entry_native = p.get("entry_native")
+        if not st.quote_usd and p.get("entry_quote_usd"):
+            st.quote_usd = float(p["entry_quote_usd"])
+        if not st.quote_usd:
+            return None
+        if st.trusted is None:                 # first on-chain price: sanity check
+            if not st.dex_native and not entry_native:
                 return None
-            diff = (st.price_native / st.dex_native - 1) * 100
-            st.diff_pct = round(diff, 2)
-            st.trusted = abs(diff) <= float(c.get("ws_max_diff_pct", 20))
+            lim = float(c.get("ws_max_diff_pct", 20))
+            diff = (st.price_native / st.dex_native - 1) * 100 if st.dex_native else None
+            fill_diff = (st.price_native / float(entry_native) - 1) * 100 if entry_native else None
+            st.diff_pct = round(diff, 2) if diff is not None else None
+            st.trusted = (diff is not None and abs(diff) <= lim) or (fill_diff is not None and abs(fill_diff) <= lim)
             name = self.db.coin_name(p["mint"])
-            txt = (f"{name}: zincir fiyatı DexScreener'a göre {diff:+.1f}% ({st.kind}) · "
+            parts = []
+            if diff is not None:
+                parts.append(f"DexScreener'a göre {diff:+.1f}%")
+            if fill_diff is not None:
+                parts.append(f"zincir girişine göre {fill_diff:+.1f}%")
+            txt = (f"{name}: zincir fiyatı {' · '.join(parts)} ({st.kind}) · "
                    + ("anlık zincir fiyatı kullanılıyor" if st.trusted else "güvenilmedi, DexScreener ile devam"))
-            self.decide(p["mint"], "ws_check", txt, {"kind": st.kind, "wsNative": st.price_native,
-                                                    "dexNative": st.dex_native, "diffPct": st.diff_pct, "trusted": st.trusted})
-            (self.log.info if st.trusted else self.log.warning)("%s ws check %s diff=%.2f%% trusted=%s", p["mint"], st.kind, diff, st.trusted)
+            gx = float(c.get("zincir_gap_exit_pct", 40) or 0)
+            if not st.trusted and gx > 0 and diff is not None and diff <= -gx:
+                st.gap_exit = f"zincir fiyatı %{-diff:.0f} düşük → çıktım"
+                txt = f"{name}: {st.gap_exit} ({st.kind})"
+            self.decide(p["mint"], "ws_check", txt, {"kind": st.kind, "wsNative": st.price_native, "dexNative": st.dex_native,
+                                                    "entryNative": entry_native, "diffPct": st.diff_pct,
+                                                    "fillDiffPct": None if fill_diff is None else round(fill_diff, 2),
+                                                    "trusted": st.trusted})
+            (self.log.info if st.trusted else self.log.warning)("%s ws check %s diff=%s fill_diff=%s trusted=%s", p["mint"], st.kind,
+                                                                diff, fill_diff, st.trusted)
+            if getattr(st, "gap_exit", None):
+                q = st.quote_reserve or 0
+                return st.price_native * st.quote_usd, 2 * q * st.quote_usd, st
         if not st.trusted:
             return None
         q = st.quote_reserve or 0
@@ -428,8 +458,10 @@ class Risk(Agent):
                 "stop": f"{name} hit the -{sp:g}% stop{vol} · -${abs(pnl):.2f}",
                 "timeout": f"Sell {name}, dead money · {pct:+.1f}% in {c['timeout_h']:g}h",
                 "pulled": f"{name}: liquidity pulled · sell now",
-                "rug_early": f"{name}: rug erken uyarısı · hemen sat · {'+' if pnl >= 0 else '-'}${abs(pnl):.2f}"
-                             + (f" · {detail}" if detail and detail.startswith("rug uyarısı") else ""),
+                "rug_early": (f"{name}: {detail} · {'+' if pnl >= 0 else '-'}${abs(pnl):.2f}"
+                              if detail and detail.startswith("zincir fiyatı") else
+                              f"{name}: rug erken uyarısı · hemen sat · {'+' if pnl >= 0 else '-'}${abs(pnl):.2f}"
+                              + (f" · {detail}" if detail and detail.startswith("rug uyarısı") else "")),
                 "tp": tp_txt}[reason]
         sub = {"trail": ("Risk · runner trail: kalan satıldı" if p.get("runner") else "Risk · trailing stop"),
                "stop": f"Risk · -{sp:g}% stop{vol}",

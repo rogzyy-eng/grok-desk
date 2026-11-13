@@ -2,7 +2,10 @@
 
 Supported pools (owner program of the DexScreener pairAddress, layouts checked live 2026-11-12):
   pumpfun      6EF8rr… bonding curve account: virtual token / SOL reserves (u64 @8 / @16), real SOL @32
-  pumpswap     pAMMBay… pool: base_mint @43, quote_mint @75, base vault @139, quote vault @171, coin_creator @211
+  pumpswap     pAMMBay… pool: base_mint @43, quote_mint @75, base vault @139, quote vault @171, coin_creator @211,
+               is_mayhem_mode @243, is_cashback_coin @244, virtual_quote_reserves i128 @245 (signed; may be negative)
+               PumpSwap prices against effective quote = quote vault + virtual_quote_reserves (pump-public-docs);
+               the raw vault alone read 13-60% under the swap price on boosted pools (checked live 2026-11-13).
   raydium_v4   675kPX… AMM v4: base vault @336, quote vault @368, base mint @400, quote mint @432
   raydium_cpmm CPMMoo… CPMM: vault0 @72, vault1 @104, mint0 @168, mint1 @200
 For vault pools the two vault token accounts are subscribed (jsonParsed → tokenAmount) and
@@ -126,7 +129,24 @@ def decode_pool(owner, data: bytes, mint, address=None):
     creator = _key(data, 211) if kind == "pumpswap" and len(data) >= 243 else None
     if creator == "11111111111111111111111111111111":
         creator = None
-    return {"kind": kind, "coin_vault": coin_vault, "quote_vault": quote_vault, "quote_mint": quote_mint, "creator": creator}
+    out = {"kind": kind, "coin_vault": coin_vault, "quote_vault": quote_vault, "quote_mint": quote_mint, "creator": creator}
+    if kind == "pumpswap":
+        out["vq_raw"] = virtual_quote_raw(data)
+    return out
+
+
+def virtual_quote_raw(data: bytes) -> int:
+    """PumpSwap Pool::virtual_quote_reserves (i128 little-endian @245, raw quote units). 0 on older/short layouts."""
+    if not data or len(data) < 261:
+        return 0
+    return int.from_bytes(data[245:261], "little", signed=True)
+
+
+def token_decimals(value, default=9):
+    try:
+        return int(value["data"]["parsed"]["info"]["tokenAmount"]["decimals"])
+    except (KeyError, TypeError, ValueError):
+        return default
 
 
 def decode_curve(data: bytes):
@@ -171,14 +191,79 @@ def fast_drain(hist, now, window_s, drop_pct):
     return None
 
 
+ENTRY_RPC_TIMEOUT_S = 3.0
+ENTRY_RETRY_S = 0.4              # one quick retry after a 429 / timeout before the buy falls back to DexScreener
+
+
+async def _entry_rpc(rpc, method, params, sleep, timeout):
+    """One RPC call for the entry read: short timeout, one quick retry on 429 / timeout. Raises on failure."""
+    last = None
+    for i in range(2):
+        try:
+            try:
+                coro = rpc(method, params, timeout=timeout)
+            except TypeError:                      # fakes without a timeout kwarg
+                coro = rpc(method, params)
+            r = await asyncio.wait_for(coro, timeout + 0.5)
+            res = (r or {}).get("result")
+            return res.get("value") if isinstance(res, dict) else res
+        except Exception as e:
+            last = e
+            status = getattr(e, "status", None)
+            transient = (status in (429, -32429) or isinstance(e, asyncio.TimeoutError)
+                         or "Timeout" in type(e).__name__ or "Timeout" in str(e))
+            if not transient or i:
+                raise
+            await sleep(ENTRY_RETRY_S)
+    raise last
+
+
+async def read_price(rpc, pool, mint, sleep=asyncio.sleep, timeout=ENTRY_RPC_TIMEOUT_S):
+    """Executor: the pool's on-chain price once, just before a buy (same decoders as the Watcher).
+    pump.fun curve = 1 call (getAccountInfo); vault pools = getAccountInfo + one getMultipleAccounts for both vaults.
+    -> ({kind, price_native, quote_reserve}, None) or (None, reason) when unsupported / unreadable."""
+    if not rpc or not pool:
+        return None, "no RPC / pool"
+    try:
+        v = await _entry_rpc(rpc, "getAccountInfo", [pool, {"encoding": "base64", "commitment": "processed"}], sleep, timeout)
+    except Exception as e:
+        return None, f"RPC {type(e).__name__}{' ' + str(getattr(e, 'status', '')) if getattr(e, 'status', None) is not None else ''}"
+    if not v:
+        return None, "pool account not found"
+    d = decode_pool(v.get("owner"), b64data(v), mint, pool)
+    if not d:
+        return None, f"pool type not supported ({(v.get('owner') or '?')[:8]})"
+    if d["kind"] == "pumpfun":
+        cur = decode_curve(b64data(v))
+        if not cur or cur["coin"] <= 0 or cur["quote"] <= 0:
+            return None, "curve unreadable"
+        return {"kind": "pumpfun", "price_native": cur["quote"] / cur["coin"], "quote_reserve": cur["real_quote"]}, None
+    try:
+        vals = await _entry_rpc(rpc, "getMultipleAccounts",
+                                [[d["coin_vault"], d["quote_vault"]], {"encoding": "jsonParsed", "commitment": "processed"}],
+                                sleep, timeout)
+    except Exception as e:
+        return None, f"RPC {type(e).__name__}"
+    vals = list(vals or []) + [None, None]
+    coin, quote = token_ui(vals[0]) if vals[0] else None, token_ui(vals[1]) if vals[1] else None
+    if not coin or not quote or coin <= 0 or quote <= 0:
+        return None, "vault balances unreadable"
+    eff = quote + d.get("vq_raw", 0) / 10 ** token_decimals(vals[1])
+    if eff <= 0:
+        return None, "effective quote reserve <= 0"
+    return {"kind": d["kind"], "price_native": eff / coin, "quote_reserve": quote}, None
+
+
 class PoolState:
     def __init__(self, mint, pool, kind, subs):
         self.mint, self.pool, self.kind, self.subs = mint, pool, kind, subs   # subs: {address: role}
         self.coin = self.quote = self.real_quote = None
+        self.vq_raw, self.quote_decimals = 0, 9   # PumpSwap virtual quote reserves (raw) + quote token decimals
         self.ts = None
         self.hist = deque()
         self.trusted = None          # None = not checked yet against DexScreener; False = poll only
         self.diff_pct = None
+        self.gap_exit = None         # set by Risk.ws_price: distrusted and zincir far under DexScreener
         self.dex_native = self.quote_usd = None
         self.creator = None
         self.dev_start = self.dev_now = None
@@ -188,9 +273,17 @@ class PoolState:
         self.updates = 0
 
     @property
+    def effective_quote(self):
+        """Quote side the AMM prices against: vault balance + PumpSwap virtual_quote_reserves (0 elsewhere)."""
+        if self.quote is None:
+            return None
+        return self.quote + (self.vq_raw or 0) / 10 ** (self.quote_decimals or 0)
+
+    @property
     def price_native(self):
-        if self.coin and self.quote and self.coin > 0 and self.quote > 0:
-            return self.quote / self.coin
+        q = self.effective_quote
+        if self.coin and q and self.coin > 0 and self.quote > 0 and q > 0:
+            return q / self.coin
         return None
 
     @property
@@ -264,6 +357,9 @@ class Watcher:
             self._apply(st, "curve", v)
         else:
             st = PoolState(mint, pool, d["kind"], {d["coin_vault"]: "coin", d["quote_vault"]: "quote"})
+            if d["kind"] == "pumpswap":           # virtual_quote_reserves moves with every trade's fees
+                st.vq_raw = d.get("vq_raw", 0)
+                st.subs[pool] = "pool"
             vals = await self._rpc_value("getMultipleAccounts", [[d["coin_vault"], d["quote_vault"]], {"encoding": "jsonParsed"}])
             for addr, val in zip((d["coin_vault"], d["quote_vault"]), vals or []):
                 if val:
@@ -426,7 +522,7 @@ class Watcher:
     async def _subscribe(self, addr, role):
         i = self._id()
         self.pending[i] = addr
-        enc = "base64" if role == "curve" else "jsonParsed"
+        enc = "base64" if role in ("curve", "pool") else "jsonParsed"
         await self._send({"jsonrpc": "2.0", "id": i, "method": "accountSubscribe",
                           "params": [addr, {"encoding": enc, "commitment": "processed"}]})
 
@@ -436,6 +532,11 @@ class Watcher:
             if cur:
                 st.coin, st.quote, st.real_quote = cur["coin"], cur["quote"], cur["real_quote"]
             return
+        if role == "pool":
+            data = b64data(value)
+            if data and len(data) >= 261:
+                st.vq_raw = virtual_quote_raw(data)
+            return
         amt = token_ui(value)
         if amt is None:
             return
@@ -443,6 +544,7 @@ class Watcher:
             st.coin = amt
         elif role == "quote":
             st.quote = amt
+            st.quote_decimals = token_decimals(value, st.quote_decimals)
         if role in ("dev", "dev+top"):
             st.dev_now = amt
         if role in ("top", "dev+top"):

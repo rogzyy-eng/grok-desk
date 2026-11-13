@@ -108,7 +108,7 @@ def test_watch_finds_top_holder_and_follows_it_over_ws():
     st = asyncio.run(go())
     assert seen == [("top", 3e7)] and st.top_now == 3e7
     subs = [m["params"][0] for m in sockets[0].sent if m["method"] == "accountSubscribe"]
-    assert sorted(subs) == sorted([CV, QV, "TOPATA"])
+    assert sorted(subs) == sorted([CV, QV, "TOPATA", "POOL"])
     assert rpc.calls.count("getTokenLargestAccounts") == 1                # one lookup at entry, then ws only
 
 

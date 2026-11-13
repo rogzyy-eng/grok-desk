@@ -63,13 +63,15 @@ class DB:
 
     # extra columns added after the first install; ALTER only when missing (keeps existing DBs + open positions)
     # 2026-11-12: entry liquidity, per-position risk snapshot, paper price impact, runner partial close
-    # 2026-11-13: take-profit snapshot (tp_pct, tp_sell_frac)
+    # 2026-11-13: take-profit snapshot (tp_pct, tp_sell_frac); on-chain entry (dex_entry_price, entry_native, entry_quote_usd, entry_gap_pct)
     MIGRATIONS = {"positions": {"volatile": "INTEGER DEFAULT 0", "m5_change_pct": "REAL",
                                 "entry_liq_usd": "REAL", "trail_start_pct": "REAL", "trail_pct": "REAL", "timeout_h": "REAL",
                                 "runner_trail_pct": "REAL", "entry_impact_pct": "REAL", "market_entry_price": "REAL",
                                 "runner": "INTEGER DEFAULT 0", "partial_at": "REAL", "partial_qty": "REAL",
                                 "partial_price": "REAL", "partial_usd": "REAL", "partial_fee": "REAL", "last_liq_usd": "REAL",
-                                "price_source": "TEXT", "tp_pct": "REAL", "tp_sell_frac": "REAL"}}
+                                "price_source": "TEXT", "tp_pct": "REAL", "tp_sell_frac": "REAL",
+                                "dex_entry_price": "REAL", "entry_native": "REAL", "entry_quote_usd": "REAL",
+                                "entry_gap_pct": "REAL"}}
 
     def migrate(self):
         for table, cols in self.MIGRATIONS.items():

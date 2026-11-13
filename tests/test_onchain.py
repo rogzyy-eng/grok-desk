@@ -50,7 +50,7 @@ def test_b58_roundtrip():
 
 def test_decode_pumpswap_both_orders():
     d = decode_pool(onchain.PUMP_SWAP, pumpswap_bytes(), MINT)
-    assert d == {"kind": "pumpswap", "coin_vault": CV, "quote_vault": QV, "quote_mint": WSOL, "creator": CR}
+    assert d == {"kind": "pumpswap", "coin_vault": CV, "quote_vault": QV, "quote_mint": WSOL, "creator": CR, "vq_raw": 0}
     d = decode_pool(onchain.PUMP_SWAP, pumpswap_bytes(base=WSOL, quote=MINT, bv=QV, qv=CV), MINT)
     assert (d["coin_vault"], d["quote_vault"], d["quote_mint"]) == (CV, QV, WSOL)
     assert decode_pool(onchain.PUMP_SWAP, pumpswap_bytes(), "OtherMint1111111111111111111111111111111111") is None
@@ -160,7 +160,7 @@ def test_watcher_subscribes_prices_and_reconnects():
     assert seen == [("quote", 0.00011), ("coin", round(110 / 900_000, 8)), ("dev", round(110 / 900_000, 8))]
     assert w.reconnects == 2 and len(conns) == 2
     subs = [m["params"][0] for ws in conns for m in ws.sent if m["method"] == "accountSubscribe"]
-    assert sorted(subs) == sorted([CV, QV, "DEVATA"] * 2)        # resubscribed after the drop
+    assert sorted(subs) == sorted([CV, QV, "DEVATA", "POOL"] * 2)  # resubscribed after the drop (pool = virtual quote)
     assert st.dev_now == 0 and st.dev_start == 50_000_000
 
 
