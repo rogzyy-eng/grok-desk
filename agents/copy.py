@@ -99,7 +99,26 @@ class Copy(Agent):
         self.watcher = None
         self._busy = set()          # mints currently being processed
         self.sol_usd = None
+        self.last_signal = None     # clock() of the last buy/sell seen from a watched wallet
+        self.signals = 0
         self.beat("ok", "idle")
+
+    def status_note(self):
+        n = len(self.watcher.wallets) if self.watcher is not None else len(self.wallets())
+        if self.last_signal is None:
+            last = "henüz yok"
+        else:
+            last = f"{max(0, (self.clock() - self.last_signal) / 60):.0f} dk önce"
+        note = f"izleniyor: {n} cüzdan, son sinyal {last}"
+        failed = getattr(self.watcher, "fetch_failed", 0) if self.watcher is not None else 0
+        if failed:
+            note += f", {failed} tx okunamadı"
+        return note
+
+    def beat(self, status="ok", note=""):
+        if not note and status == "ok" and hasattr(self, "last_signal"):
+            note = self.status_note()
+        super().beat(status, note)
 
     def wallets(self):
         return parse_wallets(self.db.get("copy.wallets") or [])
@@ -138,10 +157,11 @@ class Copy(Agent):
         if self.paused() or not self.db.get("copy.enabled", True):
             return
         flows = wallet_flows(tx, wallet)
-        if not flows:
-            return
+        if not flows or not (flows.get("buys") or flows.get("sells")):
+            return      # airdrops, fee distributions, ATA spam: not a trade
         handle = self.by_addr().get(wallet) or handle_of(self.wallets(), wallet)
         now = self.clock()
+        self.last_signal, self.signals = now, self.signals + 1
         # sells first so a sell+buy tx can close then (not) reopen
         for s in flows.get("sells") or []:
             await self.on_sell(handle, wallet, sig, s, flows.get("block_time"), now)
@@ -158,6 +178,7 @@ class Copy(Agent):
             self.decide(mint, "skip", f"kopya: {tag} {qtxt} aldı → sinyal {age_s:.0f}s eski, atladım")
             return
         if not self._busy_add(mint):
+            self.decide(mint, "skip", f"kopya: {tag} {qtxt} aldı → bu coin zaten işleniyor")
             return
         try:
             await self._buy(handle, tag, wallet, sig, buy, qtxt, now)
@@ -171,6 +192,7 @@ class Copy(Agent):
             self.decide(mint, "skip", f"kopya: {tag} {qtxt} aldı → sadece PAPER'da açılır")
             return
         if self.db.one("SELECT 1 FROM positions WHERE copy_sig=?", (sig,)):
+            self.decide(mint, "skip", f"kopya: {tag} {qtxt} aldı → bu işlem zaten kopyalandı")
             return
         cap = int(self.db.get("copy.max_open", 3) or 0)
         if open_count(self.db, "copy") >= cap:
@@ -214,7 +236,8 @@ class Copy(Agent):
             "start_qty": buy.get("token_post"), "note": f"kopya {tag} {qtxt}",
         })
         if not pid:
-            # executor logged the skip (gap, ticket, reentry…)
+            # executor logged the skip (gap, ticket, reentry…); keep a copy-side trace too
+            self.decide(mint, "skip", f"kopya: {tag} {qtxt} aldı → denetimden geçti, Executor açmadı")
             return
         text = f"kopya: {tag} {qtxt} aldı → denetimden geçti, PAPER aldım"
         self.decide(mint, "open", text, {"handle": handle, "wallet": wallet, "sig": sig, "notional": notional})
@@ -256,10 +279,12 @@ class Copy(Agent):
         mint = sell["mint"]
         frac = float(self.db.get("copy.follow_sell_pct", 50) or 0)
         if frac <= 0 or self.risk is None:
+            self.decide(mint, "seen", f"kopya: @{handle} sattı → takip satışı kapalı")
             return
         pos = self.db.one("SELECT * FROM positions WHERE mint=? AND source='copy' AND copy_wallet=? "
                           "AND status IN ('open','pending') ORDER BY id DESC", (mint, wallet))
         if not pos:
+            self.decide(mint, "seen", f"kopya: @{handle} sattı → bizde pozisyon yok")
             return
         start = pos.get("copy_start_qty")
         if not start:

@@ -279,3 +279,86 @@ def test_copy_py_does_not_hardcode_wallets():
                  "8bXzTJq3sNkzD8T1mXVCaMvg1D3CL1heYJBgSPM8WVow",
                  "5DBkonys2H4qHr5x9CCeXPLSWEFbnnLFP1RdfxjJgzvy"):
         assert addr not in src
+
+
+# ---- regression: real FOMO transactions (saved from mainnet, 13 Nov 2026) ----
+import json as _json
+import os as _os
+
+from onchain import TX_VERSION, WalletWatcher
+from sources import FetchError
+
+FIX = _os.path.join(_os.path.dirname(__file__), "fixtures", "copy")
+JOE = "8bXzTJq3sNkzD8T1mXVCaMvg1D3CL1heYJBgSPM8WVow"
+OLEDSED = "DNEZYWcqJs9zas47NJuYmp4zraPNAAaTk8uVUqSFzqEj"
+SOL589 = "3SW1va94ZdQGyRVW7hUFj9Mt3BX3KvqCPo42zZDSApFC"
+END837 = "5DBkonys2H4qHr5x9CCeXPLSWEFbnnLFP1RdfxjJgzvy"
+FP = "Fp4JkqEcKYKBKhb9iMu9NSDeo71HWgq2q9QtXaaKpump"
+
+
+def fx(name):
+    with open(_os.path.join(FIX, name + ".json")) as f:
+        return _json.load(f)
+
+
+def test_real_fomo_v1_usdc_buy_detected():
+    tx = fx("joe_buy_usdc_v1")
+    assert tx["version"] == 1
+    # FOMO: relayer is the fee payer, the wallet only co-signs, USDC is the quote, token-2022 mint
+    assert tx["transaction"]["message"]["accountKeys"][0]["pubkey"] != JOE
+    f = wallet_flows(tx, JOE)
+    assert [b["mint"] for b in f["buys"]] == [FP]
+    b = f["buys"][0]
+    assert b["quote"] == "USDC" and 1000 < b["quote_amount"] < 1010
+    f2 = wallet_flows(fx("joe_buy2_usdc_v1"), JOE)
+    assert f2["buys"][0]["mint"] == FP and f2["buys"][0]["quote"] == "USDC"
+
+
+def test_real_fomo_sells_detected():
+    f = wallet_flows(fx("joe_sell_v1"), JOE)
+    assert f["sells"] and not f["buys"]
+    f = wallet_flows(fx("oledsed_sell_sol_v1"), OLEDSED)
+    assert f["sells"][0]["token_post"] == 0 and not f["buys"]
+
+
+def test_real_noise_is_not_a_trade():
+    for name, w in (("sol589_fee_distribution", SOL589), ("end837_ata_spam", END837)):
+        f = wallet_flows(fx(name), w)
+        assert not f or (not f["buys"] and not f["sells"])
+
+
+def test_fetch_tx_asks_for_v1_and_retries_newer_version():
+    calls = []
+
+    async def rpc(method, params, timeout=30.0):
+        v = params[1]["maxSupportedTransactionVersion"]
+        calls.append(v)
+        if v < 2:
+            raise FetchError("RPC -32015: Transaction version (2) is not supported by the requesting client.", -32015)
+        return {"result": {"ok": True}}
+
+    assert TX_VERSION >= 1
+    w = WalletWatcher("ws://x", rpc, sleep=no_sleep)
+    assert asyncio.run(w.fetch_tx("S")) == {"ok": True}
+    assert calls == [TX_VERSION, 2]
+
+
+def test_real_fomo_buy_through_agent_logs_decision_and_heartbeat(db):
+    tx = fx("joe_buy_usdc_v1")
+    t = tx["blockTime"] + 5
+    cp, ex, rk, au, n = mk(db, t=t)
+    asyncio.run(cp.on_tx(JOE, tx["transaction"]["signatures"][0], tx))
+    assert au.calls == [FP]
+    d = db.one("SELECT * FROM decisions WHERE agent='copy' ORDER BY id DESC")
+    assert d and d["mint"] == FP and "@joecroskey 1004.08 USDC aldı" in d["reason"] and d["decision"] == "open"
+    cp.beat("ok")
+    hb = cp.status_note()
+    assert hb.startswith("izleniyor: ") and "son sinyal 0 dk önce" in hb
+
+
+def test_old_real_buy_is_logged_not_silent(db):
+    tx = fx("joe_buy_usdc_v1")
+    cp, *_ = mk(db, t=tx["blockTime"] + 3600)
+    asyncio.run(cp.on_tx(JOE, tx["transaction"]["signatures"][0], tx))
+    d = db.one("SELECT * FROM decisions WHERE agent='copy' ORDER BY id DESC")
+    assert d["decision"] == "skip" and "eski" in d["reason"]

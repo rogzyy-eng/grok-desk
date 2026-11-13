@@ -16,6 +16,7 @@ The websocket URL can carry an API key: it is never logged."""
 import asyncio
 import base64
 import json
+import re
 import logging
 import struct
 import time
@@ -616,6 +617,9 @@ LAMPORTS = 1_000_000_000
 SOL_FEE_DUST = 0.00005          # ignore a SOL drop that is just the tx fee
 SEEN_CAP = 2000
 POLL_LIMIT = 20
+# FOMO swaps are v1 transactions (relayer co-signs, USDC quote). Asking for version 0 makes the RPC
+# answer -32015 "Transaction version (1) is not supported", which used to be swallowed silently.
+TX_VERSION = 1
 
 
 def account_keys(tx):
@@ -734,6 +738,8 @@ class WalletWatcher:
         self.next_id = 0
         self.pending = {}            # id -> wallet (subscribe ack)
         self.sub_ids = {}            # sub id -> wallet
+        self.fetch_failed = 0        # getTransaction errors (shown in the copy heartbeat)
+        self.polls = 0               # completed poll rounds (proves the loop runs)
         self._log = logging.getLogger("copy.onchain")
 
     def set_wallets(self, wallets):
@@ -765,16 +771,24 @@ class WalletWatcher:
         return data
 
     async def fetch_tx(self, sig):
-        try:
-            return await self._rpc("getTransaction",
-                                   [sig, {"encoding": "jsonParsed", "commitment": "confirmed",
-                                          "maxSupportedTransactionVersion": 0}])
-        except Exception as e:
-            from sources import FetchError
-            if isinstance(e, FetchError) and e.status == 429:
-                raise
-            self._log.info("getTransaction failed (%s)", type(e).__name__)
-            return None
+        version = TX_VERSION
+        for _ in range(2):
+            try:
+                return await self._rpc("getTransaction",
+                                       [sig, {"encoding": "jsonParsed", "commitment": "confirmed",
+                                              "maxSupportedTransactionVersion": version}])
+            except Exception as e:
+                from sources import FetchError
+                if isinstance(e, FetchError) and e.status == 429:
+                    raise
+                m = re.search(r"version \((\d+)\) is not supported", str(e))
+                if m and int(m.group(1)) > version:
+                    version = int(m.group(1))
+                    continue
+                self.fetch_failed += 1
+                self._log.warning("getTransaction failed (%s)", type(e).__name__)
+                return None
+        return None
 
     async def emit(self, wallet, sig, tx):
         if not tx or not self.on_tx:
@@ -830,6 +844,7 @@ class WalletWatcher:
                         await self.prime(w)
                         continue
                     await self.poll_wallet(w)
+                self.polls += 1
             except Exception as e:
                 from sources import FetchError
                 if isinstance(e, FetchError) and e.status == 429:
