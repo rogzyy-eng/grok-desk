@@ -24,6 +24,14 @@ PUMP_FUN = "6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P"
 PUMP_SWAP = "pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA"
 RAY_V4 = "675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8"
 RAY_CPMM = "CPMMoo8L3F4NbTegBCKVNunggL7H1ZpdTHKxQB5qKP1C"
+RAY_V4_AUTH = "5Q544fKrFoe6tsEbD7S8EmxGTJYAKtTVhAW5Q5pge4j1"
+RAY_CPMM_AUTH = "GpMZbSM2GgvTKHJirzeGfMFoaZ8UR2X7F4v8vHTvxFbL"
+# Token-account owners that are never "the largest holder": AMM programs / authorities, token programs, system.
+NOT_HOLDERS = {PUMP_FUN, PUMP_SWAP, RAY_V4, RAY_CPMM, RAY_V4_AUTH, RAY_CPMM_AUTH,
+               "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA", "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb",
+               "11111111111111111111111111111111", "1nc1nerator11111111111111111111111111111111"}
+TOP_CANDIDATES = 10
+TOP_RETRY_S = (5, 15)            # backoff between getTokenLargestAccounts attempts on 429 / timeout
 KINDS = {PUMP_FUN: "pumpfun", PUMP_SWAP: "pumpswap", RAY_V4: "raydium_v4", RAY_CPMM: "raydium_cpmm"}
 # kind -> (mint_a, mint_b, vault_a, vault_b, min length)
 VAULT_LAYOUTS = {"pumpswap": (43, 75, 139, 171, 211), "raydium_v4": (400, 432, 336, 368, 752),
@@ -48,6 +56,47 @@ def b58decode(s: str) -> bytes:
         n = n * 58 + B58.index(ch)
     body = n.to_bytes((n.bit_length() + 7) // 8, "big") if n else b""
     return b"\0" * (len(s) - len(s.lstrip("1"))) + body
+
+
+_P = 2 ** 255 - 19
+_D = (-121665 * pow(121666, _P - 2, _P)) % _P
+
+
+def on_curve(addr) -> bool:
+    """True when a base58 address is a point on ed25519 (a wallet). PDAs (pool vault authorities, bonding
+    curves, lockers, any program-owned account) are off the curve and are never counted as a holder."""
+    try:
+        b = b58decode(addr)
+    except ValueError:
+        return False
+    if len(b) != 32:
+        return False
+    y = int.from_bytes(b, "little") & ((1 << 255) - 1)
+    if y >= _P:
+        return False
+    u, v = (y * y - 1) % _P, (_D * y * y + 1) % _P
+    x2 = u * pow(v, _P - 2, _P) % _P
+    if x2 == 0:
+        return not (b[31] >> 7)
+    return pow(x2, (_P - 1) // 2, _P) == 1
+
+
+def pick_top_holder(largest, owners, exclude_accounts=(), exclude_owners=()):
+    """largest: getTokenLargestAccounts value [{address, uiAmount(String)}]; owners: {token account: owner}.
+    -> (token_account, owner, amount) of the biggest holder that is a wallet (not the pool, a vault,
+    a program or a PDA), or None. The creator can be it."""
+    skip_a, skip_o = set(exclude_accounts), set(exclude_owners) | NOT_HOLDERS
+    for a in largest or []:
+        addr = a.get("address")
+        try:
+            amt = float(a.get("uiAmountString") or a.get("uiAmount") or 0)
+        except (TypeError, ValueError):
+            continue
+        own = owners.get(addr)
+        if not addr or amt <= 0 or not own or addr in skip_a or own in skip_o or not on_curve(own):
+            continue
+        return addr, own, amt
+    return None
 
 
 def _key(data, off):
@@ -134,6 +183,8 @@ class PoolState:
         self.creator = None
         self.dev_start = self.dev_now = None
         self.dev_supply_pct = None
+        self.top_account = self.top_owner = None
+        self.top_start = self.top_now = None   # largest wallet's balance when watching started / now
         self.updates = 0
 
     @property
@@ -164,15 +215,19 @@ async def _default_connect(url):
 class Watcher:
     """One websocket for all open positions. Reconnects with 1→60 s backoff and resubscribes everything."""
 
-    def __init__(self, ws_url, rpc, on_update=None, clock=time.time, connect=None, sleep=asyncio.sleep):
+    def __init__(self, ws_url, rpc, on_update=None, clock=time.time, connect=None, sleep=asyncio.sleep, holders=None):
         self.url, self.rpc, self.on_update, self.clock, self.sleep = ws_url, rpc, on_update, clock, sleep
+        self.holders = holders          # async mint -> (largest, owners, pool accounts): RugCheck fallback
         self.connect = connect
         self.pools = {}                 # mint -> PoolState
         self.by_addr = {}               # address -> (mint, role)
         self.sub_ids = {}               # ws subscription id -> address
         self.addr_sub = {}              # address -> ws subscription id
         self.pending = {}               # request id -> address
-        self.unsupported = {}           # mint -> reason (stays on DexScreener polling)
+        self.unsupported = {}           # mint -> reason (no on-chain price: DexScreener polling)
+        self.top_failed = {}            # mint -> reason (largest holder not watched)
+        self.top_tasks = {}
+        self._top_warned = False
         self.ws = None
         self.connected = False
         self.stopped = False
@@ -198,12 +253,12 @@ class Watcher:
         v = await self._rpc_value("getAccountInfo", [pool, {"encoding": "base64"}])
         if not v:
             self.unsupported[mint] = "pool account not found"
-            return None
+            return await self._holder_only(mint, pool)
         d = decode_pool(v.get("owner"), b64data(v), mint, pool)
         if not d:
             self.unsupported[mint] = f"pool type not supported ({(v.get('owner') or '?')[:8]})"
             log.info("%s %s -> DexScreener polling", mint, self.unsupported[mint])
-            return None
+            return await self._holder_only(mint, pool)
         if d["kind"] == "pumpfun":
             st = PoolState(mint, pool, "pumpfun", {pool: "curve"})
             self._apply(st, "curve", v)
@@ -215,7 +270,7 @@ class Watcher:
                     self._apply(st, st.subs[addr], val)
             if st.price_native is None:
                 self.unsupported[mint] = "vault balances unreadable"
-                return None
+                return await self._holder_only(mint, pool)
         st.record(self.clock())
         st.creator = d.get("creator") or creator
         if st.creator:
@@ -226,7 +281,107 @@ class Watcher:
             if self.connected:
                 await self._subscribe(addr, role)
         log.info("%s on-chain %s via %d accounts", mint, st.kind, len(st.subs))
+        self._start_top(st)
         return st
+
+    async def _holder_only(self, mint, pool):
+        """No on-chain price for this pool, but still watch its largest wallet (Risk prices it from
+        DexScreener). -> None so callers keep treating the pool as unsupported for prices."""
+        st = PoolState(mint, pool, "holder", {})
+        self.pools[mint] = st
+        self._start_top(st)
+        return None
+
+    def _start_top(self, st):
+        try:
+            self.top_tasks[st.mint] = asyncio.ensure_future(self._watch_top(st))
+        except RuntimeError:            # no running loop (sync callers / tests)
+            pass
+
+    async def _watch_top(self, st):
+        """One lookup at entry: getTokenLargestAccounts + owners (getMultipleAccounts jsonParsed), skipping the
+        pool's vaults / curve and every program-owned account; then the winner's token account rides the same
+        websocket (role 'top'). Public RPC 429s getTokenLargestAccounts, so after a 429 / timeout the RugCheck
+        topHolders list (self.holders) is tried, then the RPC again after 5 s and 15 s; then given up for this coin."""
+        reason = None
+        tried_rc = False
+        for i in range(len(TOP_RETRY_S) + 1):
+            try:
+                got = await self._top_from_rpc(st)
+                if got is None:
+                    reason = "no wallet among the largest holders"
+                    break
+                return await self._adopt_top(st, got, "rpc")
+            except Exception as e:
+                status = getattr(e, "status", None)
+                reason = f"{type(e).__name__}{' ' + str(status) if status is not None else ''}"
+                transient = status in (429, -32429) or "Timeout" in type(e).__name__ or "Timeout" in str(e)
+                if transient and self.holders and not tried_rc:
+                    tried_rc = True
+                    try:
+                        got = await self._top_from_rugcheck(st)
+                        if got:
+                            return await self._adopt_top(st, got, "rugcheck")
+                    except Exception as e2:
+                        reason += f"; rugcheck {type(e2).__name__}"
+                if not transient or i >= len(TOP_RETRY_S):
+                    break
+                await self.sleep(TOP_RETRY_S[i])
+        self.top_failed[st.mint] = reason
+        if not self._top_warned:
+            self._top_warned = True
+            log.warning("top holder not watched (%s); later failures log at info", reason)
+        else:
+            log.info("%s top holder not watched (%s)", st.mint, reason)
+        return None
+
+    def _top_skip(self, st):
+        return [a for a, r in st.subs.items() if r != "dev"], [st.pool, st.mint]
+
+    async def _top_from_rpc(self, st):
+        largest = await self._rpc_value("getTokenLargestAccounts", [st.mint, {"commitment": "confirmed"}])
+        cands = [a for a in largest or [] if a.get("address")][:TOP_CANDIDATES]
+        vals = await self._rpc_value("getMultipleAccounts", [[a["address"] for a in cands], {"encoding": "jsonParsed"}]) if cands else []
+        owners = {}
+        for a, val in zip(cands, vals or []):
+            try:
+                owners[a["address"]] = val["data"]["parsed"]["info"]["owner"]
+            except (KeyError, TypeError):
+                pass
+        ex_a, ex_o = self._top_skip(st)
+        return pick_top_holder(cands, owners, exclude_accounts=ex_a, exclude_owners=ex_o)
+
+    async def _top_from_rugcheck(self, st):
+        """self.holders(mint) -> (largest [{address, uiAmountString}], {account: owner}, pool accounts to skip).
+        The balance snapshot is re-read from the chain (one getAccountInfo) so a cached report is not the baseline."""
+        largest, owners, pool_accts = await self.holders(st.mint)
+        ex_a, ex_o = self._top_skip(st)
+        got = pick_top_holder(largest[:TOP_CANDIDATES], owners, exclude_accounts=ex_a + list(pool_accts),
+                              exclude_owners=ex_o + list(pool_accts))
+        if not got:
+            return None
+        try:
+            v = await self._rpc_value("getAccountInfo", [got[0], {"encoding": "jsonParsed"}])
+            amt = token_ui(v) if v else None
+            if amt is not None and amt > 0:
+                got = (got[0], got[1], amt)
+        except Exception:
+            pass
+        return got
+
+    async def _adopt_top(self, st, got, via):
+        if st.mint not in self.pools or self.pools[st.mint] is not st:
+            return None              # closed while we looked
+        addr, owner, amt = got
+        st.top_account, st.top_owner, st.top_start, st.top_now = addr, owner, amt, amt
+        st.top_via = via
+        role = "dev+top" if st.subs.get(addr) == "dev" else "top"
+        st.subs[addr] = role
+        self.by_addr[addr] = (st.mint, role)
+        if self.connected and addr not in self.addr_sub:     # the creator's account is already subscribed
+            await self._subscribe(addr, role)
+        log.info("%s top holder %s… watched via %s (%.0f tokens)", st.mint, owner[:6], via, amt)
+        return got
 
     async def _watch_dev(self, st):
         """Creator's token account for this coin, only when it holds something (skipped on any RPC error)."""
@@ -244,6 +399,9 @@ class Watcher:
             log.info("%s creator wallet not watched (%s)", st.mint, type(e).__name__)
 
     def unwatch(self, mint):
+        t = self.top_tasks.pop(mint, None)
+        if t and not t.done():
+            t.cancel()
         st = self.pools.pop(mint, None)
         if not st:
             return
@@ -285,8 +443,10 @@ class Watcher:
             st.coin = amt
         elif role == "quote":
             st.quote = amt
-        elif role == "dev":
+        if role in ("dev", "dev+top"):
             st.dev_now = amt
+        if role in ("top", "dev+top"):
+            st.top_now = amt
 
     async def handle(self, msg):
         if "id" in msg and msg.get("id") in self.pending:

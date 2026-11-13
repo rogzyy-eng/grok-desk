@@ -59,7 +59,7 @@ DEFAULTS = {
              "tp_pct": 54, "tp_sell_frac": 0.5,
              "pulled_liq_drop_pct": 50, "pulled_price_drop_pct": 50,
              "price_source": "auto", "ws_max_diff_pct": 20, "rug_liq_drop_fast_pct": 25, "rug_window_s": 20,
-             "rug_dev_sell_pct": 50, "rug_dev_min_supply_pct": 1},
+             "rug_dev_sell_pct": 50, "rug_dev_min_supply_pct": 1, "rug_top_holder_sell_pct": 25},
     "desk": {"mode": "PAPER", "paper_start_stack": 200, "report_time": "08:00", "notifier": "webpush",
              "rpc_url": "https://api.mainnet-beta.solana.com", "ws_url": "wss://api.mainnet-beta.solana.com", "push_rejects": False,
              "fees_ref_discount": 0.10, "fomo_handle": "rogzyy3", "tz": "Europe/Istanbul"},
@@ -95,6 +95,7 @@ RANGES = {
     "risk.pulled_liq_drop_pct": (10, 95, 1), "risk.pulled_price_drop_pct": (10, 95, 1),
     "risk.ws_max_diff_pct": (5, 50, 1), "risk.rug_liq_drop_fast_pct": (5, 90, 1), "risk.rug_window_s": (5, 120, 1),
     "risk.rug_dev_sell_pct": (10, 100, 5), "risk.rug_dev_min_supply_pct": (0.1, 20, 0.1),
+    "risk.rug_top_holder_sell_pct": (0, 100, 1),
     "desk.paper_start_stack": (10, 10000, 10), "desk.fees_ref_discount": (0, 0.5, 0.01),
 }
 

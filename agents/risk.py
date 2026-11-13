@@ -2,7 +2,7 @@
 reserves over a Solana websocket (onchain.Watcher, evaluated on every account update), checked once against
 DexScreener (> risk.ws_max_diff_pct apart = poll only); otherwise / "poll" / socket down: DexScreener every
 [poll_s]. Exits at the price that fired it (even if it gapped past the line). rug_early sells when the pool's SOL
-drains fast or the creator dumps; pulled stays as the backstop. Take-profit (risk.tp_pct) sells a slice once and the rest becomes a runner;
+drains fast, the creator dumps or the largest wallet sells > risk.rug_top_holder_sell_pct; pulled stays as the backstop. Take-profit (risk.tp_pct) sells a slice once and the rest becomes a runner;
 first trail hit otherwise sells half. The runner trails wider from the fill price. Never moves a stop down; never waits for a bounce; can't be paused while a position is open."""
 import asyncio
 
@@ -125,17 +125,30 @@ def pulled(p, price, liq, c):
 def rug_early(st, now, c):
     """Exit before the crash. -> Turkish reason or None. Uses the on-chain pool state only:
     quote-side reserve (SOL in the pool) down >= [rug_liq_drop_fast_pct] within [rug_window_s], or the creator
-    wallet (held >= [rug_dev_min_supply_pct] of supply when watching started) sold >= [rug_dev_sell_pct] of it."""
+    wallet (held >= [rug_dev_min_supply_pct] of supply when watching started) sold >= [rug_dev_sell_pct] of it, or
+    the largest non-pool wallet sold > [rug_top_holder_sell_pct] of what it held at our entry."""
     if st is None:
         return None
     drop = fast_drain(st.hist, now, float(c.get("rug_window_s", 20)), float(c.get("rug_liq_drop_fast_pct", 25)))
     if drop is not None:
         return f"havuzdaki SOL {drop:.0f}% / {float(c.get('rug_window_s', 20)):g}sn"
+    top = top_holder_sold(st, c)
+    if top is not None:
+        return f"rug uyarısı: en büyük cüzdan %{top:.0f} sattı"
     if st.dev_start and st.dev_now is not None and (st.dev_supply_pct or 0) >= float(c.get("rug_dev_min_supply_pct", 1)):
         sold = (1 - st.dev_now / st.dev_start) * 100
         if sold >= float(c.get("rug_dev_sell_pct", 50)):
             return f"geliştirici cüzdanı payının %{sold:.0f}'ini sattı"
     return None
+
+
+def top_holder_sold(st, c):
+    """% of its entry-time balance the largest wallet has sold, when > [rug_top_holder_sell_pct] (0 = off)."""
+    lim = float(c.get("rug_top_holder_sell_pct", 25) or 0)
+    if lim <= 0 or not getattr(st, "top_start", None) or st.top_now is None:
+        return None
+    sold = (1 - st.top_now / st.top_start) * 100
+    return sold if sold > lim else None
 
 
 def src_tr(source):
@@ -218,6 +231,10 @@ class Risk(Agent):
                     got = self.ws_price(p, c)
                     if got:
                         await self.assess(p, got[0], got[1], c, now, "zincir", rug_early(got[2], now, c))
+                    elif c.get("price_source", "auto") == "auto" and p.get("last_price"):
+                        rug = rug_early(st, now, c)       # no trusted ws price: rug checks still run
+                        if rug:
+                            await self.assess(p, p["last_price"], p.get("last_liq_usd"), c, now, "DexScreener", rug)
         except Exception:
             self.log.exception("ws update failed")
 
@@ -273,7 +290,10 @@ class Risk(Agent):
                     if n == c["no_price_polls"]:
                         await self.notifier.push("noprice", f"{name}: no price for 1 min", mint=p["mint"], buttons=[sell_button(p["mint"])])
                     continue
-                exits += await self.assess(p, price, liqs.get(p["mint"]), c, now, "DexScreener" if polled else None)
+                st = self.watcher.state(p["mint"]) if (self.watcher is not None and polled
+                                                      and c.get("price_source", "auto") == "auto") else None
+                exits += await self.assess(p, price, liqs.get(p["mint"]), c, now, "DexScreener" if polled else None,
+                                           rug_early(st, now, c) if st else None)
         self.db.snapshot_balance(now)
         if hit_429:
             await self.backoff_429(len(pos))
@@ -408,7 +428,8 @@ class Risk(Agent):
                 "stop": f"{name} hit the -{sp:g}% stop{vol} · -${abs(pnl):.2f}",
                 "timeout": f"Sell {name}, dead money · {pct:+.1f}% in {c['timeout_h']:g}h",
                 "pulled": f"{name}: liquidity pulled · sell now",
-                "rug_early": f"{name}: rug erken uyarısı · hemen sat · {'+' if pnl >= 0 else '-'}${abs(pnl):.2f}",
+                "rug_early": f"{name}: rug erken uyarısı · hemen sat · {'+' if pnl >= 0 else '-'}${abs(pnl):.2f}"
+                             + (f" · {detail}" if detail and detail.startswith("rug uyarısı") else ""),
                 "tp": tp_txt}[reason]
         sub = {"trail": ("Risk · runner trail: kalan satıldı" if p.get("runner") else "Risk · trailing stop"),
                "stop": f"Risk · -{sp:g}% stop{vol}",
@@ -457,11 +478,20 @@ class Risk(Agent):
         await self.notifier.push("still_open", f"{self.db.coin_name(p['mint'])} still open", mint=p["mint"],
                                  buttons=[sell_button(p["mint"]), {"label": "Sold", "action": "sold", "mint": p["mint"]}])
 
+    async def rc_holders(self, mint):
+        """RugCheck topHolders in getTokenLargestAccounts shape (fallback when the RPC 429s)."""
+        rep = await self.src.rc_report(mint) or {}
+        th = [h for h in rep.get("topHolders") or [] if isinstance(h, dict) and h.get("address")]
+        largest = [{"address": h["address"], "uiAmountString": str(h.get("uiAmountString") or h.get("uiAmount") or 0)} for h in th]
+        owners = {h["address"]: h.get("owner") for h in th if h.get("owner")}
+        return largest, owners, fields.rc_pool_vaults(rep) | fields.rc_pool_pubkeys(rep)
+
     async def run(self):
         import config
         from onchain import Watcher
         if self.watcher is None and hasattr(self.src, "rpc"):
-            self.watcher = Watcher(config.ws_url(self.db), self.src.rpc, self.on_ws, clock=self.clock)
+            self.watcher = Watcher(config.ws_url(self.db), self.src.rpc, self.on_ws, clock=self.clock,
+                                   holders=self.rc_holders if hasattr(self.src, "rc_report") else None)
         if self.watcher is None:
             return await self.loop("risk.poll_s", self.tick)
         await asyncio.gather(self.loop("risk.poll_s", self.tick), self.watcher.run())
