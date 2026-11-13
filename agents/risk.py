@@ -454,6 +454,7 @@ class Risk(Agent):
         trail_txt = (f"{name}: runner trail: kalan satıldı · {value}" if p.get("runner")
                      else (f"Sold {name}{run} · +${pnl:.2f} (+{pct:.1f}%)" if pnl >= 0 else f"Sold {name}{run} · -${-pnl:.2f} ({pct:.1f}%)"))
         tp_txt = f"{name}: kâr al: +%{(price / p['entry_price'] - 1) * 100:.0f} · tamamı satıldı · {'+' if pnl >= 0 else '-'}${abs(pnl):.2f}"
+        copy_txt = (detail or f"{name}: kopya satış → çıktım") + f" · {'+' if pnl >= 0 else '-'}${abs(pnl):.2f}"
         text = {"trail": trail_txt,
                 "stop": f"{name} hit the -{sp:g}% stop{vol} · -${abs(pnl):.2f}",
                 "timeout": f"Sell {name}, dead money · {pct:+.1f}% in {c['timeout_h']:g}h",
@@ -462,13 +463,15 @@ class Risk(Agent):
                               if detail and detail.startswith("zincir fiyatı") else
                               f"{name}: rug erken uyarısı · hemen sat · {'+' if pnl >= 0 else '-'}${abs(pnl):.2f}"
                               + (f" · {detail}" if detail and detail.startswith("rug uyarısı") else "")),
-                "tp": tp_txt}[reason]
+                "tp": tp_txt,
+                "copy_sell": copy_txt}[reason]
         sub = {"trail": ("Risk · runner trail: kalan satıldı" if p.get("runner") else "Risk · trailing stop"),
                "stop": f"Risk · -{sp:g}% stop{vol}",
                "timeout": f"Risk · timeout {c['timeout_h']:g}h",
                "pulled": "Risk · liquidity pulled" + (f" ({detail})" if detail else ""),
                "rug_early": "Risk · rug erken uyarı" + (f" ({detail})" if detail else ""),
-               "tp": "Risk · kâr al"}[reason] + imp_txt
+               "tp": "Risk · kâr al",
+               "copy_sell": "Copy · kopya satış"}[reason] + imp_txt
         if source:
             text += f" · fiyat: {src_tr(source)}"
             sub += f" · fiyat: {src_tr(source)}"
@@ -488,6 +491,8 @@ class Risk(Agent):
             title = f"{name}: kâr al · tamamı satıldı"
         elif reason == "stop":
             title = f"Stopped {name}"
+        elif reason == "copy_sell":
+            title = detail or f"kopya satış: {name}"
         else:
             title = f"Sold {name}"
         self.bus.activity("stopped" if reason == "stop" else "sold", p["mint"], "risk", title, sub, value)

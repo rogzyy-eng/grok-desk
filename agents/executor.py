@@ -63,6 +63,15 @@ def stack_now(db):
     return float(db.get("desk.live_stack") or 0) if db.get("desk.mode") == "LIVE" else db.cash()
 
 
+def open_count(db, source=None):
+    """Open/pending/exiting positions. source='copy' counts only copy trades;
+    any other value (or None) counts the scanner/executor book, not copy."""
+    rows = db.open_positions()
+    if source == "copy":
+        return sum(1 for p in rows if p.get("source") == "copy")
+    return sum(1 for p in rows if p.get("source") != "copy")
+
+
 def _norm_sym(value):
     return (value or "").strip().casefold()
 
@@ -133,7 +142,7 @@ class Executor(Agent):
         mode = self.db.get("desk.mode", "PAPER")
         now = self.clock()
         name = self.db.coin_name(mint)
-        if len(self.db.open_positions()) >= c["max_open"]:
+        if open_count(self.db) >= c["max_open"]:
             return self._skip(mint, f"{c['max_open']} positions already open")
         blocked = reentry_skip_reason(self.db, mint, now, c.get("reentry_cooldown_min", 60))
         if blocked:
@@ -225,6 +234,66 @@ class Executor(Agent):
         self.decide(mint, "entry_price", f"{self.db.coin_name(mint)}: zincir fiyatı okunamadı ({why}) · DexScreener fiyatından girildi",
                     {"reason": why})
         return {"note": "DexScreener (zincir okunamadı)"}
+
+    async def open_copy(self, ev):
+        """Open a PAPER position for the copy agent. Uses ticket sizing, on-chain entry
+        price (entry_max_gap_pct) and the risk snapshot. Does not count against
+        executor.max_open (copy.max_open is checked by the copy agent). LIVE is refused.
+        Activity / push are left to the copy agent (Turkish texts)."""
+        mint = ev["mint"]
+        c = self.cfg()
+        mode = self.db.get("desk.mode", "PAPER")
+        now = self.clock()
+        if mode != "PAPER":
+            return self._skip(mint, "kopya sadece PAPER'da açılır")
+        cap = int(self.db.get("copy.max_open", 3) or 0)
+        if open_count(self.db, "copy") >= cap:
+            return self._skip(mint, f"kopya limiti doldu ({cap})")
+        blocked = reentry_skip_reason(self.db, mint, now, c.get("reentry_cooldown_min", 60))
+        if blocked:
+            return self._skip(mint, blocked)
+        p1 = ev.get("pair") or await self.fresh(mint)
+        if not p1 or not p1.get("price_usd"):
+            return self._skip(mint, "recheck: no fresh price")
+        size, note = size_ticket(stack_now(self.db), c, p1.get("liq_usd"))
+        if size is None:
+            return self._skip(mint, note)
+        dex_market = p1["price_usd"]
+        liq = p1.get("liq_usd")
+        chain = await self.entry_chain_price(mint, p1, c)
+        if chain.get("skip"):
+            return self._skip(mint, chain["skip"])
+        market = chain.get("usd") or dex_market
+        fee = fees.side_fee(size, float(self.db.get("desk.fees_ref_discount", 0.10)))
+        rc = self.db.section("risk")
+        m5 = p1.get("chg_m5")
+        volatile = m5 is not None and abs(float(m5)) >= float(rc.get("volatile_m5_pct", 15))
+        snap = risk_snapshot(rc, volatile)
+        stop_pct = snap["stop_pct"]
+        risk_note = (f"volatil (5dk {float(m5):+.0f}%) · stop {stop_pct:g}%" if volatile else f"stop {stop_pct:g}%")
+        price, impact = fees.buy_impact(size - fee, market, liq)
+        extra = ev.get("note") or "kopya"
+        note = f"{note} · {risk_note}" + (f" · impact {impact:.2f}%" if impact else "") + f" · fiyat: {chain['note']} · {extra}"
+        link = links.coin_url(mint, "solana")
+        sid = self.db.insert("signals", {"mint": mint, "ts": now, "price": price, "size_usd": size, "stack_pct": c["stack_pct"],
+                                         "link": link, "mode": "PAPER", "status": "filled",
+                                         "side": "buy", "reason": note})
+        pos = {"mint": mint, "opened_at": now, "entry_price": price, "size_usd": size, "peak_price": price,
+               **snap, "stop_price": price * (1 - stop_pct / 100), "trail_active": 0, "mode": "PAPER",
+               "entry_fee": fee, "fees_usd": fee, "last_price": price, "signal_id": sid,
+               "volatile": int(volatile), "m5_change_pct": None if m5 is None else float(m5),
+               "entry_liq_usd": liq, "last_liq_usd": liq, "market_entry_price": market, "entry_impact_pct": impact,
+               "price_source": "zincir" if chain.get("usd") else "DexScreener", "dex_entry_price": dex_market,
+               "entry_native": chain.get("native"), "entry_quote_usd": chain.get("quote_usd"), "entry_gap_pct": chain.get("gap"),
+               "source": "copy", "copy_handle": ev.get("handle"), "copy_wallet": ev.get("wallet"),
+               "copy_sig": ev.get("sig"), "copy_start_qty": ev.get("start_qty"),
+               "status": "open", "qty": (size - fee) / price}
+        pid = self.db.insert("positions", pos)
+        name = self.db.coin_name(mint)
+        self.db.move_cash(-size, f"paper buy {name} #{pid} copy", "PAPER")
+        self.decide(mint, "open", f"PAPER copy ${size:.2f} @ {price:.8g} · {note}")
+        self.log.info("PAPER copy %s size=%.2f price=%s fee=%.4f %s", mint, size, price, fee, note)
+        return pid
 
     async def expire_pending(self):
         """LIVE: no [Bought] tap within [confirm_min] → the signal expires (nothing was bought).

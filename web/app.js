@@ -35,7 +35,7 @@ const pct = v => v == null ? "—" : (v > 0 ? "+" : "") + v.toFixed(1) + "%";
 const px = v => v == null ? "—" : "$" + (v >= 1 ? v.toFixed(4) : Number(v).toPrecision(4));
 const ago = ts => { const s = Math.max(0, Date.now() / 1000 - ts); return s < 60 ? Math.floor(s) + "s" : s < 3600 ? Math.floor(s / 60) + "m" : s < 86400 ? Math.floor(s / 3600) + "h" : Math.floor(s / 86400) + "d"; };
 const cls = v => v > 0 ? "up" : v < 0 ? "down" : "muted";
-const AG = { scanner: "SC", auditor: "AU", analyst: "AN", executor: "EX", risk: "RK", desk: "DK" };
+const AG = { scanner: "SC", auditor: "AU", analyst: "AN", executor: "EX", risk: "RK", copy: "CP", desk: "DK" };
 const loading = () => `<div class="skel"></div><div class="skel" style="height:140px"></div><div class="skel"></div>`;
 const empty = (ico, title, sub) => `<div class="state"><div class="ico">${ico}</div><b>${esc(title)}</b><div>${esc(sub)}</div></div>`;
 const errorBox = e => `<div class="state"><div class="ico">⚠️</div><b>Couldn't load</b><div>${esc(e.message || e)}</div><button class="btn" style="max-width:200px;margin-top:8px" data-retry="1">Try again</button></div>`;
@@ -128,7 +128,7 @@ async function home() {
 async function agents() {
   setTitle("Agents"); const v = $("#view"); v.innerHTML = loading();
   let d; try { d = await api("/api/agents"); } catch (e) { if (e.authRejected) return; v.innerHTML = errorBox(e); return; }
-  const role = { scanner: "Watches PumpSwap migrations", auditor: "8 safety layers", analyst: "Alive · organic · chase", executor: "Sizes tickets · never places orders", risk: "Stop · trail · timeout" };
+  const role = { scanner: "Watches PumpSwap migrations", auditor: "8 safety layers", analyst: "Alive · organic · chase", executor: "Sizes tickets · never places orders", risk: "Stop · trail · timeout", copy: "Copies top FOMO wallets · PAPER only" };
   v.innerHTML = `<div class="list">${d.agents.map(a => { const hb = a.heartbeat, age = hb ? Date.now() / 1000 - hb.ts : 1e9;
     const st = !hb ? ["wait", "starting"] : hb.status === "error" ? ["bad", "error"] : age > 180 ? ["bad", "stale"] : ["ok", "live"];
     return `<div class="row" data-agent="${a.name}"><div class="av ${a.name}">${AG[a.name]}</div>
@@ -170,7 +170,7 @@ async function account() {
   setTitle("Account"); const v = $("#view"); v.innerHTML = loading();
   let a, s; try { [a, s] = await Promise.all([api("/api/account"), api("/api/settings")]); } catch (e) { if (e.authRejected) return; v.innerHTML = errorBox(e); return; }
   const pushState = !("Notification" in window) ? "Add Desk to your Home Screen to enable push" : Notification.permission === "granted" ? "Enabled on this phone" : "Tap to enable";
-  const groups = s.settings, editable = ["scanner", "auditor", "analyst", "executor", "risk", "desk"];
+  const groups = s.settings, editable = ["scanner", "auditor", "analyst", "executor", "risk", "copy", "desk"];
   v.innerHTML = `
   <div class="card"><div class="kv"><span>FOMO</span><span>@${esc(a.fomo_handle)}</span></div>
     <div class="kv"><span>Mode</span><span>${esc(a.mode)}</span></div><div class="kv"><span>Stack</span><span class="num">${usd(a.stack_usd)}</span></div>

@@ -1,6 +1,7 @@
 """commands.py — STEP 9. Same handler for the app, Telegram (if ever on) and Grok Bot.
 No command ever places an order: buy/sell only return the FOMO button; bought/sold record what
 Osman did by hand. Every coin mentioned carries its links.coin_url."""
+import json
 import re
 import time
 
@@ -49,6 +50,26 @@ CHOICES = {"desk.notifier": ("webpush", "telegram", "none"), "analyst.mode": ("r
 
 
 def coerce(old, raw):
+    if isinstance(old, (list, dict)):
+        if isinstance(raw, (list, dict)):
+            return raw
+        raw = str(raw).strip()
+        try:
+            got = json.loads(raw)
+        except ValueError:
+            got = None
+        if isinstance(old, list):
+            if isinstance(got, list):
+                from agents.copy import parse_wallets
+                return parse_wallets(got)
+            from agents.copy import parse_wallets
+            parsed = parse_wallets(raw)
+            if parsed:
+                return parsed
+            raise ValueError("expected a wallet list")
+        if isinstance(got, dict):
+            return got
+        raise ValueError("expected JSON")
     raw = str(raw).strip()
     if isinstance(old, bool):
         if raw.lower() in ("true", "on", "1", "yes", "evet"):
@@ -144,7 +165,7 @@ async def handle(desk, text, source="app"):
             who = (args[0].lower() if args else "")
             names = list(config.AGENTS) if who in ("", "all", "desk") else [who]
             if any(n not in config.AGENTS for n in names):
-                return {"ok": False, "text": "pause/resume scanner|auditor|analyst|executor|risk|all"}
+                return {"ok": False, "text": "pause/resume scanner|auditor|analyst|executor|risk|copy|all"}
             cur = set(db.get("desk.paused_agents") or [])
             if cmd == "pause":
                 if "risk" in names and db.open_positions():

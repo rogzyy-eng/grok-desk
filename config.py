@@ -38,6 +38,18 @@ RUGCHECK_GRAPH = "https://api.rugcheck.xyz/v1/tokens/{mint}/insiders/graph"
 JEV_URL = "https://api.typesafe.ai/v1/systemone"
 LAYER8_PROOF_MINT = "A3qwGJEEc6Vzq17gWj3T97J1ArR3fHD5wgNmR2pkpump"   # CYBRON (STEP 2 sample)
 
+# Seeded into copy.wallets (INSERT OR IGNORE). The copy agent reads the setting, not this list.
+COPY_WALLETS = [
+    {"handle": "joecroskey", "address": "8bXzTJq3sNkzD8T1mXVCaMvg1D3CL1heYJBgSPM8WVow"},
+    {"handle": "end837", "address": "5DBkonys2H4qHr5x9CCeXPLSWEFbnnLFP1RdfxjJgzvy"},
+    {"handle": "g41t3r98", "address": "4t5cayg6FDWkyQwyuYq9DqcRRCQ7e6JXyf9J7f2wfZQW"},
+    {"handle": "leo", "address": "3qBVJLMAWXCbW3nhz99T99in82zZeUHkbDeSDJThbN4Z"},
+    {"handle": "0xbr9", "address": "Csa8eosaYKB6KHd51NQvh931jXbmZkBqNqPaQy1qet9Z"},
+    {"handle": "sol589", "address": "3SW1va94ZdQGyRVW7hUFj9Mt3BX3KvqCPo42zZDSApFC"},
+    {"handle": "oledsed", "address": "DNEZYWcqJs9zas47NJuYmp4zraPNAAaTk8uVUqSFzqEj"},
+    {"handle": "horseimnot", "address": "CFJr1M2z3SZpQpBMoY3nagpafvS7Uzanq4L7KVXVKi22"},
+]
+
 DEFAULTS = {
     "scanner": {"min_liquidity_usd": 40000, "max_top10_pct": 25, "max_h1_change_pct": 80, "poll_s": 60,
                 "min_pool_age_min": 10, "max_wait_min": 60, "runner_h24_pct": 300,
@@ -64,6 +76,8 @@ DEFAULTS = {
     "desk": {"mode": "PAPER", "paper_start_stack": 200, "report_time": "08:00", "notifier": "webpush",
              "rpc_url": "https://api.mainnet-beta.solana.com", "ws_url": "wss://api.mainnet-beta.solana.com", "push_rejects": False,
              "fees_ref_discount": 0.10, "fomo_handle": "rogzyy3", "tz": "Europe/Istanbul"},
+    "copy": {"enabled": True, "min_buy_usd": 100, "max_open": 3, "max_age_s": 60, "follow_sell_pct": 50,
+             "wallets": COPY_WALLETS},
 }
 
 # Slider ranges for the Account tab (min, max, step). Not in the spec text; UI only.
@@ -98,7 +112,10 @@ RANGES = {
     "risk.rug_dev_sell_pct": (10, 100, 5), "risk.rug_dev_min_supply_pct": (0.1, 20, 0.1),
     "risk.rug_top_holder_sell_pct": (0, 100, 1), "risk.zincir_gap_exit_pct": (0, 100, 1),
     "desk.paper_start_stack": (10, 10000, 10), "desk.fees_ref_discount": (0, 0.5, 0.01),
+    "copy.min_buy_usd": (10, 10000, 10), "copy.max_open": (1, 10, 1),
+    "copy.max_age_s": (5, 600, 5), "copy.follow_sell_pct": (0, 100, 1),
 }
+
 
 # "set stop to -8%" aliases (STEP 9)
 ALIASES = {"stop": "risk.stop_pct", "trail": "risk.trail_pct", "trail start": "risk.trail_start_pct",
@@ -112,7 +129,7 @@ ALIASES = {"stop": "risk.stop_pct", "trail": "risk.trail_pct", "trail start": "r
 # keys dropped from DEFAULTS; removed from old DBs at startup so the Account tab does not show dead sliders
 OBSOLETE = ("analyst.rules_alive_volume_h1", "analyst.rules_organic_buys_h1")
 
-AGENTS = ("scanner", "auditor", "analyst", "executor", "risk")
+AGENTS = ("scanner", "auditor", "analyst", "executor", "risk", "copy")
 
 
 def rpc_url(db=None):

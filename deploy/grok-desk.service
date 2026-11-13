@@ -1,5 +1,5 @@
 [Unit]
-Description=Grok FOMO desk (5 agents + API) — never places orders
+Description=Grok FOMO desk (6 agents + API) — never places orders
 After=network-online.target
 Wants=network-online.target
 

@@ -76,6 +76,12 @@ def make_app(desk):
             if name == "risk":
                 card["guarding"] = bool(db.open_positions())
                 card["pills"] = [f"stop -{db.get('risk.stop_pct'):g}%", f"trail {db.get('risk.trail_pct'):g}%"]
+            if name == "copy":
+                from agents.copy import parse_wallets
+                n = len(parse_wallets(db.get("copy.wallets") or []))
+                card["pills"] = [f"{n} wallets", "PAPER only"]
+                if not db.get("copy.enabled", True):
+                    card["pills"].append("off")
             out.append(card)
         return out
 

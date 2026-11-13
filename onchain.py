@@ -606,3 +606,310 @@ class Watcher:
             self.reconnects += 1
             await self.sleep(backoff)
             backoff = min(backoff * 2, 60)
+
+# ---- copy-trade wallet watching (logsSubscribe + getSignaturesForAddress poll) ----
+# Quote mints for "SOL/USDC went out, a token came in". WSOL is treated as SOL.
+WSOL = "So11111111111111111111111111111111111111112"
+USDC = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"
+QUOTE_MINTS = {WSOL, USDC}
+LAMPORTS = 1_000_000_000
+SOL_FEE_DUST = 0.00005          # ignore a SOL drop that is just the tx fee
+SEEN_CAP = 2000
+POLL_LIMIT = 20
+
+
+def account_keys(tx):
+    msg = ((tx or {}).get("transaction") or {}).get("message") or {}
+    out = []
+    for k in msg.get("accountKeys") or []:
+        if isinstance(k, str):
+            out.append(k)
+        elif isinstance(k, dict):
+            out.append(k.get("pubkey") or k.get("publicKey") or "")
+    return out
+
+
+def _ui(tb):
+    amt = ((tb or {}).get("uiTokenAmount") or {}).get("uiAmount")
+    try:
+        return 0.0 if amt is None else float(amt)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def _token_map(balances, wallet):
+    """owner==wallet -> {mint: ui amount}, summing across token accounts."""
+    out = {}
+    for b in balances or []:
+        if not isinstance(b, dict) or b.get("owner") != wallet:
+            continue
+        mint = b.get("mint")
+        if not mint:
+            continue
+        out[mint] = out.get(mint, 0.0) + _ui(b)
+    return out
+
+
+def wallet_flows(tx, wallet):
+    """Parse a jsonParsed getTransaction result for one wallet.
+    -> {sig, block_time, buys:[{mint, quote, quote_amount, token_amount, token_pre, token_post}],
+        sells:[{mint, token_amount, token_pre, token_post}]} or None if the tx failed / has no keys."""
+    if not isinstance(tx, dict) or not wallet:
+        return None
+    # RPC wrappers: {"result": {...}} or the inner value
+    if "result" in tx and isinstance(tx.get("result"), dict) and "meta" in (tx["result"] or {}):
+        tx = tx["result"]
+    meta = tx.get("meta") or {}
+    if meta.get("err") is not None:
+        return None
+    keys = account_keys(tx)
+    if not keys or wallet not in keys:
+        # still try token-balance owner (ATA-only mention)
+        pre_t, post_t = _token_map(meta.get("preTokenBalances"), wallet), _token_map(meta.get("postTokenBalances"), wallet)
+        if not pre_t and not post_t:
+            return None
+        idx = None
+    else:
+        idx = keys.index(wallet)
+        pre_t, post_t = _token_map(meta.get("preTokenBalances"), wallet), _token_map(meta.get("postTokenBalances"), wallet)
+    sigs = tx.get("transaction", {}).get("signatures") or []
+    if not sigs and isinstance((tx.get("transaction") or {}).get("signatures"), list):
+        sigs = tx["transaction"]["signatures"]
+    # also top-level (some encodings)
+    sig = (sigs[0] if sigs else None) or tx.get("signature")
+    block_time = tx.get("blockTime") or tx.get("block_time")
+    pre_b, post_b = meta.get("preBalances") or [], meta.get("postBalances") or []
+    fee = float(meta.get("fee") or 0) / LAMPORTS
+    sol_out = 0.0
+    if idx is not None and idx < len(pre_b) and idx < len(post_b):
+        raw = (pre_b[idx] - post_b[idx]) / LAMPORTS
+        if idx == 0:                       # fee payer: lamport drop includes the fee
+            raw -= fee
+        sol_out = 0.0 if raw <= SOL_FEE_DUST else raw
+    mints = set(pre_t) | set(post_t)
+    deltas = {m: post_t.get(m, 0.0) - pre_t.get(m, 0.0) for m in mints}
+    wsol_delta = deltas.get(WSOL, 0.0)
+    # wrap: SOL out ≈ WSOL in; unwrap: WSOL out ≈ SOL in. Ignore those.
+    if sol_out and wsol_delta > 0 and abs(sol_out - wsol_delta) <= max(0.001, 0.02 * sol_out):
+        sol_out, deltas[WSOL] = 0.0, 0.0
+    sol_spent = sol_out + max(0.0, -wsol_delta)
+    usdc_spent = max(0.0, -deltas.get(USDC, 0.0))
+    buys, sells = [], []
+    for mint, d in deltas.items():
+        if mint in QUOTE_MINTS:
+            continue
+        pre, post = pre_t.get(mint, 0.0), post_t.get(mint, 0.0)
+        if d > 0 and (sol_spent > SOL_FEE_DUST or usdc_spent > 0):
+            # prefer the quote that actually left; if both, the larger USD is applied later
+            if usdc_spent >= sol_spent and usdc_spent > 0:
+                quote, qamt = "USDC", usdc_spent
+            else:
+                quote, qamt = "SOL", sol_spent
+            buys.append({"mint": mint, "quote": quote, "quote_amount": qamt,
+                         "token_amount": d, "token_pre": pre, "token_post": post})
+        elif d < 0:
+            sells.append({"mint": mint, "token_amount": -d, "token_pre": pre, "token_post": post})
+    return {"sig": sig, "block_time": block_time, "buys": buys, "sells": sells,
+            "sol_spent": sol_spent, "usdc_spent": usdc_spent}
+
+
+class WalletWatcher:
+    """Watch a list of wallets for new transactions. Prefers logsSubscribe (mentions=wallet)
+    on the same ws_url the price Watcher uses; falls back to (and always also) polling
+    getSignaturesForAddress + getTransaction. The websocket/RPC URL is never logged."""
+
+    def __init__(self, ws_url, rpc, on_tx=None, clock=time.time, sleep=asyncio.sleep, connect=None,
+                 poll_s=15):
+        self.url, self.rpc, self.on_tx = ws_url, rpc, on_tx
+        self.clock, self.sleep, self.connect = clock, sleep, connect
+        self.poll_s = poll_s
+        self.wallets = []
+        self.seen = set()
+        self._seen_order = deque()
+        self.primed = set()          # wallets whose history has been marked seen (not replayed)
+        self.stopped = False
+        self.ws = None
+        self.connected = False
+        self.reconnects = 0
+        self.next_id = 0
+        self.pending = {}            # id -> wallet (subscribe ack)
+        self.sub_ids = {}            # sub id -> wallet
+        self._log = logging.getLogger("copy.onchain")
+
+    def set_wallets(self, wallets):
+        self.wallets = list(dict.fromkeys(a for a in wallets if a))
+
+    def _id(self):
+        self.next_id += 1
+        return self.next_id
+
+    def remember(self, sig):
+        if not sig or sig in self.seen:
+            return False
+        self.seen.add(sig)
+        self._seen_order.append(sig)
+        while len(self._seen_order) > SEEN_CAP:
+            self.seen.discard(self._seen_order.popleft())
+        return True
+
+    async def _send(self, obj):
+        try:
+            await self.ws.send(json.dumps(obj))
+        except Exception as e:
+            self._log.info("ws send failed (%s)", type(e).__name__)
+
+    async def _rpc(self, method, params, timeout=30.0):
+        data = await self.rpc(method, params, timeout=timeout)
+        if isinstance(data, dict) and "result" in data:
+            return data["result"]
+        return data
+
+    async def fetch_tx(self, sig):
+        try:
+            return await self._rpc("getTransaction",
+                                   [sig, {"encoding": "jsonParsed", "commitment": "confirmed",
+                                          "maxSupportedTransactionVersion": 0}])
+        except Exception as e:
+            from sources import FetchError
+            if isinstance(e, FetchError) and e.status == 429:
+                raise
+            self._log.info("getTransaction failed (%s)", type(e).__name__)
+            return None
+
+    async def emit(self, wallet, sig, tx):
+        if not tx or not self.on_tx:
+            return
+        try:
+            await self.on_tx(wallet, sig, tx)
+        except Exception:
+            self._log.exception("on_tx failed")
+
+    async def prime(self, wallet):
+        """Mark existing signatures seen so a restart does not replay old trades."""
+        if wallet in self.primed:
+            return
+        try:
+            rows = await self._rpc("getSignaturesForAddress",
+                                   [wallet, {"limit": POLL_LIMIT, "commitment": "confirmed"}]) or []
+        except Exception as e:
+            from sources import FetchError
+            if isinstance(e, FetchError) and e.status == 429:
+                raise
+            self._log.info("getSignaturesForAddress failed (%s)", type(e).__name__)
+            return
+        for r in rows or []:
+            sig = r.get("signature") if isinstance(r, dict) else r
+            self.remember(sig)
+        self.primed.add(wallet)
+
+    async def poll_wallet(self, wallet):
+        rows = await self._rpc("getSignaturesForAddress",
+                               [wallet, {"limit": POLL_LIMIT, "commitment": "confirmed"}]) or []
+        new = []
+        for r in rows or []:
+            sig = r.get("signature") if isinstance(r, dict) else r
+            err = r.get("err") if isinstance(r, dict) else None
+            if err or not sig or sig in self.seen:
+                continue
+            new.append(sig)
+        # oldest first
+        for sig in reversed(new):
+            if not self.remember(sig):
+                continue
+            tx = await self.fetch_tx(sig)
+            if tx:
+                await self.emit(wallet, sig, tx)
+
+    async def poll_loop(self, backoff_429):
+        while not self.stopped:
+            try:
+                for w in list(self.wallets):
+                    if self.stopped:
+                        break
+                    if w not in self.primed:
+                        await self.prime(w)
+                        continue
+                    await self.poll_wallet(w)
+            except Exception as e:
+                from sources import FetchError
+                if isinstance(e, FetchError) and e.status == 429:
+                    self._log.warning("429 from RPC: backing off")
+                    await backoff_429()
+                else:
+                    self._log.info("poll failed (%s)", type(e).__name__)
+            await self.sleep(self.poll_s)
+
+    async def handle(self, msg):
+        if "id" in msg and msg.get("id") in self.pending:
+            wallet = self.pending.pop(msg["id"])
+            if "result" in msg:
+                self.sub_ids[msg["result"]] = wallet
+            elif "error" in msg:
+                self._log.warning("logsSubscribe failed: %s", (msg["error"] or {}).get("message"))
+            return
+        if msg.get("method") != "logsNotification":
+            return
+        prm = msg.get("params") or {}
+        wallet = self.sub_ids.get(prm.get("subscription"))
+        val = (prm.get("result") or {}).get("value") or {}
+        sig, err = val.get("signature"), val.get("err")
+        if not wallet or not sig or err or not self.remember(sig):
+            return
+        try:
+            tx = await self.fetch_tx(sig)
+        except Exception as e:
+            from sources import FetchError
+            if isinstance(e, FetchError) and e.status == 429:
+                self.seen.discard(sig)
+                raise
+            return
+        if tx:
+            await self.emit(wallet, sig, tx)
+
+    async def ws_loop(self, backoff_429):
+        backoff = 1
+        while not self.stopped:
+            if not self.wallets:
+                await self.sleep(1)
+                continue
+            try:
+                cm = self.connect(self.url) if self.connect else await _default_connect(self.url)
+                async with cm as ws:
+                    self.ws, self.connected = ws, True
+                    self.sub_ids.clear(); self.pending.clear()
+                    self._log.info("wallet ws connected (%d wallets)", len(self.wallets))
+                    for w in list(self.wallets):
+                        i = self._id()
+                        self.pending[i] = w
+                        await self._send({"jsonrpc": "2.0", "id": i, "method": "logsSubscribe",
+                                          "params": [{"mentions": [w]}, {"commitment": "confirmed"}]})
+                    backoff = 1
+                    async for raw in ws:
+                        try:
+                            await self.handle(json.loads(raw))
+                        except Exception as e:
+                            from sources import FetchError
+                            if isinstance(e, FetchError) and e.status == 429:
+                                await backoff_429()
+                            else:
+                                self._log.exception("ws message failed")
+                        if self.stopped or not self.wallets:
+                            break
+            except Exception as e:
+                self._log.warning("wallet ws down (%s); retry in %ss", type(e).__name__, backoff)
+            finally:
+                self.connected, self.ws = False, None
+            if self.stopped:
+                break
+            self.reconnects += 1
+            await self.sleep(backoff)
+            backoff = min(backoff * 2, 60)
+
+    async def run(self, backoff_429=None):
+        async def _default_backoff():
+            await self.sleep(30)
+        fn = backoff_429 or _default_backoff
+        await asyncio.gather(self.ws_loop(fn), self.poll_loop(fn))
+
+    def stop(self):
+        self.stopped = True

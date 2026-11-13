@@ -50,7 +50,7 @@ main{padding:14px 16px;animation:fade .25s ease}
 .av{width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px;flex:none}
 .av.scanner{background:rgba(10,132,255,.18);color:var(--blue)} .av.auditor{background:rgba(191,90,242,.18);color:var(--purple)}
 .av.analyst{background:rgba(100,210,255,.16);color:var(--teal)} .av.executor{background:rgba(48,209,88,.16);color:var(--green)}
-.av.risk{background:rgba(255,69,58,.16);color:var(--red)} .av.desk{background:rgba(142,142,147,.2);color:var(--dim)}
+.av.risk{background:rgba(255,69,58,.16);color:var(--red)} .av.copy{background:rgba(255,159,10,.16);color:var(--amber)} .av.desk{background:rgba(142,142,147,.2);color:var(--dim)}
 .pill{font-size:12px;font-weight:600;padding:3px 9px;border-radius:999px;background:var(--card2);color:var(--dim)}
 .pill.ok{background:rgba(48,209,88,.15);color:var(--green)} .pill.bad{background:rgba(255,69,58,.15);color:var(--red)} .pill.wait{background:rgba(255,214,10,.14);color:var(--amber)}
 .btn{display:block;width:100%;padding:15px;border-radius:14px;font-weight:600;font-size:16px;text-align:center;background:var(--card2)}

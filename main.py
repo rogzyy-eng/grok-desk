@@ -1,4 +1,4 @@
-"""main.py — ONE process: 5 agents + API. PAPER by default. python main.py"""
+"""main.py — ONE process: 6 agents + API. PAPER by default. python main.py"""
 import asyncio
 import json
 import logging
@@ -19,6 +19,7 @@ class Desk:
         from agents.executor import Executor
         from agents.risk import Risk
         from agents.scanner import Scanner
+        from agents.copy import Copy
         self.db = db or DB()
         self.bus = Bus(self.db)
         self.notifier = Notifier(self.db, self.bus)
@@ -29,7 +30,8 @@ class Desk:
         a = (self.db, self.bus, self.src, self.notifier)
         self.scanner, self.auditor, self.analyst = Scanner(*a, clock=clock), Auditor(*a, clock=clock), Analyst(*a, clock=clock)
         self.executor, self.risk = Executor(*a, clock=clock), Risk(*a, clock=clock)
-        self.agents = [self.scanner, self.auditor, self.analyst, self.executor, self.risk]
+        self.copy = Copy(*a, clock=clock, auditor=self.auditor, executor=self.executor, risk=self.risk)
+        self.agents = [self.scanner, self.auditor, self.analyst, self.executor, self.risk, self.copy]
         self.crashed = []
         self.app_coins = {}
         from agents.risk import lines
@@ -60,7 +62,7 @@ async def layer8_proof(desk):
 async def proof_loop(desk):
     while True:
         res = await layer8_proof(desk)
-        held = ["scanner", "auditor", "analyst", "executor"]
+        held = ["scanner", "auditor", "analyst", "executor", "copy"]
         cur = set(desk.db.get("desk.paused_agents") or [])
         if res["passed"]:
             if desk.db.get("desk.paused_by_proof"):
