@@ -8,7 +8,8 @@ The risk settings (stop/trail start/trail/timeout/runner trail, plus tp_pct / tp
 volatile coins (|5-min price change| >= risk.volatile_m5_pct) get them × risk.volatile_factor. PAPER fills pay
 constant-product price impact (size / (liquidity/2)) on top of the FOMO fee.
 Entry price (2026-11-13): the pool's on-chain price is read once just before the buy (onchain.read_price). Zincir more
-than [entry_max_gap_pct] under DexScreener -> skip; otherwise the fill (and stop / trail / take-profit) uses the
+than [entry_max_gap_pct] under DexScreener -> skip; zincir more than [entry_max_premium_pct] ABOVE DexScreener -> skip
+(2026-11-18: entries 3%+ over Dex lost -$81 on 73 trades, the rest made +$22 on 27); otherwise the fill (and stop / trail / take-profit) uses the
 on-chain price; unsupported pool / RPC failure -> DexScreener price as before."""
 import fees
 import fields
@@ -200,7 +201,8 @@ class Executor(Agent):
 
     async def entry_chain_price(self, mint, p1, c):
         """On-chain price of the pool once, right before the buy (onchain.read_price).
-        -> {"skip": text} when zincir is more than [entry_max_gap_pct] under DexScreener (0 = off);
+        -> {"skip": text} when zincir is more than [entry_max_gap_pct] under DexScreener, or more than
+        [entry_max_premium_pct] above it (each 0 = off);
         {"usd", "native", "quote_usd", "gap", "kind", "note"} to fill at the on-chain price;
         {"note"} only (DexScreener fill) when the pool is unsupported or the RPC fails."""
         from onchain import read_price
@@ -222,6 +224,9 @@ class Executor(Agent):
         name = self.db.coin_name(mint)
         if lim > 0 and gap < -lim:
             return {"skip": f"fiyat uyuşmazlığı: zincir %{-gap:.0f} düşük → girmedim"}
+        prem = float(c.get("entry_max_premium_pct", 3) or 0)
+        if prem > 0 and gap > prem:
+            return {"skip": f"pahalı giriş: zincir Dex'ten %{gap:.1f} yüksek (> %{prem:g}) → girmedim"}
         quote_usd = float(dex_usd) / float(dex_native)
         usd = got["price_native"] * quote_usd
         self.decide(mint, "entry_price", f"{name}: zincir fiyatı DexScreener'a göre {gap:+.1f}% ({got['kind']}) · zincir fiyatından girildi",

@@ -91,7 +91,7 @@ def make_app(desk):
         opens = [pos_view(p) for p in db.open_positions()]
         bal = db.equity()
         start = db.get("desk.paper_start_stack", 200)
-        b0 = db.one("SELECT value FROM balance WHERE ts>=? ORDER BY ts", (day,))
+        b0 = db.one("SELECT value FROM balance WHERE ts>=? ORDER BY ts", (max(day, commands.epoch(db)),))
         today = round((bal / b0["value"] - 1) * 100, 2) if b0 and b0["value"] else 0.0
         curve = [[r["ts"], r["value"]] for r in db.q("SELECT ts, value FROM balance ORDER BY ts DESC LIMIT 300")][::-1]
         return {"mode": db.get("desk.mode"), "paused": bool(db.get("desk.paused_agents")),
@@ -215,10 +215,11 @@ def make_app(desk):
         return decisions(agent)
 
     @app.get("/api/account", dependencies=A)
-    def account():
+    def account(all: int = 0, limit: int = 100):
         h = db.get("desk.fomo_handle")
+        since = 0 if all else commands.epoch(db)          # after a PAPER reset: only trades since it (all=1: archive too)
         closed = db.q("SELECT p.*, c.symbol FROM positions p LEFT JOIN coins c USING(mint) WHERE p.status='closed' "
-                      "ORDER BY closed_at DESC LIMIT 100")
+                      "AND p.opened_at>=? ORDER BY closed_at DESC LIMIT ?", (since, max(1, min(int(limit), 2000))))
         ex = db.section("executor")
         return {"fomo_handle": h, "profile_url": links.profile_url(h), "signup_url": links.SIGNUP_URL,
                 "mode": db.get("desk.mode"), "stack_usd": round(db.cash(), 2), "live_stack": db.get("desk.live_stack"),
@@ -283,6 +284,17 @@ def make_app(desk):
         h = db.get("desk.fomo_handle")
         rec = await desk.notifier.push("test", "Test push", buttons=[{"label": "Your FOMO profile", "url": links.profile_url(h)}])
         return {"ok": True, "result": rec["result"]}
+
+    @app.post("/api/paper/reset", dependencies=A)
+    async def paper_reset(request: Request):
+        try:
+            b = await request.json()
+        except Exception:
+            b = {}
+        try:
+            return {"ok": True, **commands.paper_reset(db, b.get("stack", 100), "app")}
+        except (commands.GateError, ValueError) as e:
+            raise HTTPException(400, str(e))
 
     @app.post("/api/command", dependencies=A)
     async def command(request: Request):

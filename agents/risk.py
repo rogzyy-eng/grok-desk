@@ -107,6 +107,36 @@ def breakeven_stop_price(p, remain_qty, sold_qty, liq, disc):
     return hi
 
 
+def dex_norm(p, price):
+    """DexScreener price on the zincir scale of a zincir-filled position (2026-11-18). The fill was at the on-chain
+    price while DexScreener showed dex_entry_price; comparing a raw Dex poll to a zincir entry booked the entry gap as
+    an instant 'stop' (40 trades, 0 wins, median 3 s, -$76). Scale by market_entry_price / dex_entry_price so the stop
+    measures the move, not the gap between two price sources. Dex fills / missing fields -> unchanged."""
+    if price is None or not p.get("entry_native"):
+        return price
+    m, d = p.get("market_entry_price"), p.get("dex_entry_price")
+    if not m or not d:
+        return price
+    return price * float(m) / float(d)
+
+
+def breakeven_lock(p, price, liq, c, disc):
+    """Once a full position has peaked >= [breakeven_at_pct] over entry, the stop rises to breakeven
+    net of fees (never down; 0 = off). -> new stop price or None. 2026-11-18: 9 stopped trades had peaked
+    +10..35% before falling to the -6% stop."""
+    if p.get("runner"):
+        return None
+    at = float(c.get("breakeven_at_pct", 0) or 0)
+    entry, peak = p["entry_price"], p.get("peak_price") or p["entry_price"]
+    if at <= 0 or peak < entry * (1 + at / 100):
+        return None
+    be = breakeven_stop_price(p, p.get("qty") or 0, 0, liq, disc)
+    cur = p.get("stop_price") or 0
+    if be <= cur or be >= price:
+        return None
+    return be
+
+
 def pulled(p, price, liq, c):
     """Liquidity pulled: pool at 0, pool down > [pulled_liq_drop_pct] from entry, or price down
     > [pulled_price_drop_pct] between two polls. -> reason text or None."""
@@ -322,6 +352,8 @@ class Risk(Agent):
                     continue
                 st = self.watcher.state(p["mint"]) if (self.watcher is not None and polled
                                                       and c.get("price_source", "auto") == "auto") else None
+                if polled:
+                    price = dex_norm(p, price)
                 exits += await self.assess(p, price, liqs.get(p["mint"]), c, now, "DexScreener" if polled else None,
                                            rug_early(st, now, c) if st else None)
         self.db.snapshot_balance(now)
@@ -337,6 +369,11 @@ class Risk(Agent):
         peak = max(p["peak_price"] or price, price)
         p = {**p, "peak_price": peak, "last_price": price, "no_price_polls": 0,
              "last_liq_usd": liq if liq is not None else p.get("last_liq_usd")}
+        be = breakeven_lock(p, price, self.exit_liq(p, liq), pos_cfg(p, c), float(self.db.get("desk.fees_ref_discount", 0.10)))
+        if be:
+            p = {**p, "stop_price": be}
+            self.db.update("positions", "id=?", (p["id"],), {"stop_price": be})
+            self.decide(p["mint"], "breakeven", f"{self.db.coin_name(p['mint'])}: zirve +%{(peak / p['entry_price'] - 1) * 100:.0f} → stop başabaşa çekildi")
         stop, trail, exit_line, active = lines(p, c)
         reason = "rug_early" if rug else ("pulled" if why_pulled else check_exit(p, price, now, c))
         if reason not in ("rug_early", "pulled", "stop") and take_profit_hit(p, price, c):

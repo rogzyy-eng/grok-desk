@@ -11,7 +11,7 @@ import links
 from notifier import buy_button, sell_button
 
 HELP = ("commands: buy X · sell X · why X · pause <agent> · resume <agent> · set stop to -8% · "
-        "stack 1240 · status · paper · live · invite · report · bought X · sold X")
+        "stack 1240 · reset 100 (PAPER) · status · paper · live · invite · report · bought X · sold X")
 
 
 class GateError(Exception):
@@ -44,7 +44,7 @@ def set_mode(db, mode, confirm="", who="app"):
 
 
 PROTECTED = {"desk.mode", "desk.paper_nights", "desk.paper_since", "desk.layer8_proof", "desk.last_night_closed",
-             "desk.paused_agents", "desk.layer8_down_kills", "desk.live_stack", "desk.last_page_url"}
+             "desk.paused_agents", "desk.layer8_down_kills", "desk.live_stack", "desk.last_page_url", "desk.paper_epoch", "desk.paper_epoch_n"}
 CHOICES = {"desk.notifier": ("webpush", "telegram", "none"), "analyst.mode": ("rules", "jev"),
            "executor.below_min": ("bump", "skip"), "risk.price_source": ("auto", "poll")}
 
@@ -142,6 +142,33 @@ def status(db):
             "live_missing": live_gate(db)}
 
 
+def paper_reset(db, amount=100.0, who="app"):
+    """PAPER-only stack reset (2026-11-18). Deletes nothing: old positions/ledger rows stay; a ledger row sets
+    cash to [amount], desk.paper_epoch marks the new start (report / account / today count from it) and
+    desk.paper_start_stack becomes [amount]. Refused in LIVE or while any position is open/pending/exiting."""
+    if db.get("desk.mode") != "PAPER":
+        raise GateError("reset is PAPER only")
+    if db.open_positions():
+        raise GateError("close the open positions first")
+    amt = float(str(amount).replace("$", "").replace(",", ""))
+    if not 10 <= amt <= 10000:
+        raise GateError("reset amount must be $10-$10000")
+    now = time.time()
+    old = db.cash()
+    epoch = int(db.get("desk.paper_epoch_n", 0) or 0) + 1
+    db.insert("ledger", {"ts": now, "mode": "PAPER", "cash": amt, "delta": round(amt - old, 6),
+                         "reason": f"paper reset #{epoch}: ${old:.2f} -> ${amt:.2f}"})
+    db.set("desk.paper_epoch", now, who)
+    db.set("desk.paper_epoch_n", epoch, who)
+    db.set("desk.paper_start_stack", amt, who)
+    db.snapshot_balance(now)
+    return {"old": round(old, 2), "new": amt, "epoch": now, "epoch_n": epoch}
+
+
+def epoch(db):
+    return float(db.get("desk.paper_epoch") or 0)
+
+
 async def handle(desk, text, source="app"):
     db = desk.db
     raw = (text or "").strip()
@@ -177,7 +204,7 @@ async def handle(desk, text, source="app"):
                 cur -= set(names)
             db.set("desk.paused_agents", sorted(cur), source)
             return {"ok": True, "text": f"{cmd}d: {', '.join(names)}"}
-        if cmd == "paper":
+        if cmd == "paper" and not (args and args[0].lower() == "reset"):
             set_mode(db, "PAPER", who=source)
             return {"ok": True, "text": "PAPER mode"}
         if cmd == "live":
@@ -199,6 +226,10 @@ async def handle(desk, text, source="app"):
             amt = float(args[0].replace("$", "").replace(",", ""))
             db.set("desk.live_stack", amt, source)
             return {"ok": True, "text": f"LIVE stack ${amt:.2f}"}
+        if cmd == "reset" or (cmd == "paper" and args and args[0].lower() == "reset"):
+            rest = args[1:] if cmd == "paper" else args
+            r = paper_reset(db, rest[0] if rest else 100, source)
+            return {"ok": True, "text": f"PAPER bakiye sıfırlandı: ${r['old']:.2f} → ${r['new']:.2f} (eski işlemler arşivde)", "data": r}
         if cmd == "invite":
             return {"ok": True, "text": links.SIGNUP_URL, "buttons": [{"label": "Join FOMO", "url": links.SIGNUP_URL}]}
         if cmd == "report":

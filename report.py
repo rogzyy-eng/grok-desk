@@ -17,6 +17,7 @@ def window(db, now=None):
 def build(db, start=None, end=None):
     if start is None:
         start, end = window(db)
+    start = max(start, float(db.get("desk.paper_epoch") or 0))     # a PAPER reset starts a new count
     a = (start, end or time.time())
     closed = db.q("SELECT p.*, c.symbol FROM positions p LEFT JOIN coins c USING(mint) "
                   "WHERE p.status='closed' AND p.closed_at BETWEEN ? AND ?", a)

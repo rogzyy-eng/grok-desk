@@ -114,7 +114,7 @@ class DB:
             self.x("DELETE FROM settings WHERE key=?", (k,))
         for k, v in {"desk.paper_nights": 0, "desk.paper_since": None, "desk.paused_agents": [],
                      "desk.layer8_proof": None, "desk.last_night_closed": None, "desk.last_page_url": None,
-                     "desk.layer8_down_kills": 0}.items():
+                     "desk.layer8_down_kills": 0, "desk.paper_epoch": None, "desk.paper_epoch_n": 0}.items():
             self.x("INSERT OR IGNORE INTO settings VALUES(?,?,?)", (k, json.dumps(v), now))
         if not self.q("SELECT 1 FROM ledger LIMIT 1"):
             s = config.DEFAULTS["desk"]["paper_start_stack"]

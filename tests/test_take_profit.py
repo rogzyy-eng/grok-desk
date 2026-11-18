@@ -143,6 +143,7 @@ def test_happy_immediate_exit_regression(db):
     peak (1.61 × 0.70 = 1.127 > 1.04). Peak now restarts at the fill, so the same price holds.
     TP is off so this isolates the gap-through-trail path (HAPPY predated take-profit)."""
     t = [100.0]
+    db.set("risk.breakeven_at_pct", 0)                          # isolate the trail path (no breakeven lock)
     db.set("risk.tp_pct", 0)
     db.set("risk.trail_start_pct", 30)
     db.set("risk.trail_pct", 20)

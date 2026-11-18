@@ -109,7 +109,12 @@ def test_gap_skip_and_off(db):
 
 
 def test_zincir_above_dex_fills_at_zincir(db):
-    ex = mk_ex(db, ChainSrc(quote=1.05))
+    ex = mk_ex(db, ChainSrc(quote=1.02))                                  # +2%: inside entry_max_premium_pct 3
+    asyncio.run(ex.process({"mint": MINT, "pair": ref()}))
+    assert db.open_positions()[0]["entry_gap_pct"] == 2.0
+    db.x("DELETE FROM positions")
+    db.set("executor.entry_max_premium_pct", 0)                           # 0 = off: +5% fills at zincir
+    ex.src = ChainSrc(quote=1.05)
     asyncio.run(ex.process({"mint": MINT, "pair": ref()}))
     p = db.open_positions()[0]
     assert abs(p["market_entry_price"] - 0.00105) < 1e-12 and p["entry_gap_pct"] == 5.0

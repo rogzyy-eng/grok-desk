@@ -56,6 +56,7 @@ def test_pos_cfg_halves_only_volatile(db):
 
 def test_risk_exits_volatile_half(db):
     db.set("risk.volatile_factor", 0.5)
+    db.set("risk.breakeven_at_pct", 0)                              # isolate stop/trail/timeout (no breakeven lock)
     t = [100.0]
     n = Notifier(db, Bus(db))
     r = Risk(db, Bus(db), None, n, clock=lambda: t[0], sleep=no_sleep)
