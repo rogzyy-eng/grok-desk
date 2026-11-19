@@ -9,7 +9,11 @@ def window(db, now=None):
     now = datetime.fromtimestamp(now or time.time(), tz)
     hh, mm = map(int, str(db.get("desk.report_time", "08:00")).split(":"))
     end = now.replace(hour=hh, minute=mm, second=0, microsecond=0)
-    if end > now:
+    # A reader a few minutes early (the 08:00 routine fired at 07:59) used to get the night that ended YESTERDAY;
+    # right after a PAPER reset that window lay before the epoch -> "0 trades" (19 Nov: 10 real trades).
+    # Within [desk.report_early_min] before report_time it is tonight's report, counted up to now.
+    early = timedelta(minutes=float(db.get("desk.report_early_min", 90) or 0))
+    if end > now + early:
         end -= timedelta(days=1)
     return (end - timedelta(days=1)).timestamp(), end.timestamp()
 

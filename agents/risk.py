@@ -137,6 +137,25 @@ def breakeven_lock(p, price, liq, c, disc):
     return be
 
 
+def profit_lock(p, price, c):
+    """Profit ladder on a full position (2026-11-19): once the peak reaches +[lock1_at_pct] the stop rises to
+    +[lock1_pct] over entry, at +[lock2_at_pct] to +[lock2_pct] (never down; a pct of 0 = that step off).
+    PAPER data (133 zincir fills): 32 trades peaked +10..+50% and still closed at a loss (-$25); the breakeven
+    lock alone turned them into ~$0 after fees. Lock levels stay under the deepest dip a later big winner made
+    after +30% (@bot +18.6%, CRED +22.6%), so runners are not cut. Runners keep their own trail. -> stop or None."""
+    if p.get("runner"):
+        return None
+    entry, peak = p["entry_price"], p.get("peak_price") or p["entry_price"]
+    best = None
+    for at_k, lk_k in (("lock1_at_pct", "lock1_pct"), ("lock2_at_pct", "lock2_pct")):
+        at, lk = float(c.get(at_k, 0) or 0), float(c.get(lk_k, 0) or 0)
+        if at > 0 and lk > 0 and lk < at and peak >= entry * (1 + at / 100):
+            best = max(best or 0, entry * (1 + lk / 100))
+    if best is None or best <= (p.get("stop_price") or 0) or best >= price:
+        return None
+    return best
+
+
 def pulled(p, price, liq, c):
     """Liquidity pulled: pool at 0, pool down > [pulled_liq_drop_pct] from entry, or price down
     > [pulled_price_drop_pct] between two polls. -> reason text or None."""
@@ -264,8 +283,14 @@ class Risk(Agent):
             txt = (f"{name}: zincir fiyatı {' · '.join(parts)} ({st.kind}) · "
                    + ("anlık zincir fiyatı kullanılıyor" if st.trusted else "güvenilmedi, DexScreener ile devam"))
             gx = float(c.get("zincir_gap_exit_pct", 40) or 0)
+            fx = float(c.get("fill_drop_exit_pct", 15) or 0)
             if not st.trusted and gx > 0 and diff is not None and diff <= -gx:
                 st.gap_exit = f"zincir fiyatı %{-diff:.0f} düşük → çıktım"
+                txt = f"{name}: {st.gap_exit} ({st.kind})"
+            elif not st.trusted and fx > 0 and fill_diff is not None and fill_diff <= -fx:
+                # Same decoder as our own zincir fill, so this is a real move, not a price-source gap. GRS 2026-11-19:
+                # zincir -21% vs the fill 6 s in, distrusted, the DexScreener poll 28 s later booked -31%.
+                st.gap_exit = f"zincir fiyatı girişe göre %{-fill_diff:.0f} düşük → çıktım"
                 txt = f"{name}: {st.gap_exit} ({st.kind})"
             self.decide(p["mint"], "ws_check", txt, {"kind": st.kind, "wsNative": st.price_native, "dexNative": st.dex_native,
                                                     "entryNative": entry_native, "diffPct": st.diff_pct,
@@ -374,6 +399,12 @@ class Risk(Agent):
             p = {**p, "stop_price": be}
             self.db.update("positions", "id=?", (p["id"],), {"stop_price": be})
             self.decide(p["mint"], "breakeven", f"{self.db.coin_name(p['mint'])}: zirve +%{(peak / p['entry_price'] - 1) * 100:.0f} → stop başabaşa çekildi")
+        lk = profit_lock(p, price, pos_cfg(p, c))
+        if lk:
+            p = {**p, "stop_price": lk}
+            self.db.update("positions", "id=?", (p["id"],), {"stop_price": lk})
+            self.decide(p["mint"], "lock", f"{self.db.coin_name(p['mint'])}: zirve +%{(peak / p['entry_price'] - 1) * 100:.0f} → "
+                                           f"kâr kilidi: stop +%{(lk / p['entry_price'] - 1) * 100:.0f}")
         stop, trail, exit_line, active = lines(p, c)
         reason = "rug_early" if rug else ("pulled" if why_pulled else check_exit(p, price, now, c))
         if reason not in ("rug_early", "pulled", "stop") and take_profit_hit(p, price, c):
@@ -493,7 +524,10 @@ class Risk(Agent):
         tp_txt = f"{name}: kâr al: +%{(price / p['entry_price'] - 1) * 100:.0f} · tamamı satıldı · {'+' if pnl >= 0 else '-'}${abs(pnl):.2f}"
         copy_txt = (detail or f"{name}: kopya satış → çıktım") + f" · {'+' if pnl >= 0 else '-'}${abs(pnl):.2f}"
         text = {"trail": trail_txt,
-                "stop": f"{name} hit the -{sp:g}% stop{vol} · -${abs(pnl):.2f}",
+                "stop": (f"{name} hit the -{sp:g}% stop{vol} · -${abs(pnl):.2f}"
+                         if (p.get("stop_price") or 0) <= p["entry_price"] else
+                         f"{name}: kâr kilidi/başabaş stop (+%{(p['stop_price'] / p['entry_price'] - 1) * 100:.0f}) · "
+                         f"{'+' if pnl >= 0 else '-'}${abs(pnl):.2f}"),
                 "timeout": f"Sell {name}, dead money · {pct:+.1f}% in {c['timeout_h']:g}h",
                 "pulled": f"{name}: liquidity pulled · sell now",
                 "rug_early": (f"{name}: {detail} · {'+' if pnl >= 0 else '-'}${abs(pnl):.2f}"

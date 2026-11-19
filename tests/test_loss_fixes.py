@@ -1,5 +1,6 @@
 """2026-11-12 loss analysis fixes: crashed-coin scanner kills, m5-window analyst rules, pulled-liquidity
 exits, risk snapshot per position, PAPER price impact, runners (half on first trail hit)."""
+from conftest import no_lock
 import asyncio
 import sqlite3
 
@@ -202,6 +203,7 @@ def test_live_has_no_simulated_impact(db):
 
 # ---- 6. runners ----
 def test_runner_half_then_wide_trail(db):
+    no_lock(db)
     t = [100.0]
     ex, r, n = desk(db, t)
     p = buy(ex, db, "RN", liq=10**9)                                      # huge pool: impact ~0, exact fee maths
@@ -235,6 +237,7 @@ def test_runner_half_then_wide_trail(db):
 
 
 def test_half_under_min_trade_sells_all(db):
+    no_lock(db)
     t = [100.0]
     ex, r, _ = desk(db, t)
     db.set("executor.min_ticket_usd", 5)

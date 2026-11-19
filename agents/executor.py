@@ -40,6 +40,15 @@ SNAPSHOT = ("stop_pct", "trail_start_pct", "trail_pct", "timeout_h", "runner_tra
 SNAPSHOT_PLAIN = ("tp_pct", "tp_sell_frac")  # frozen at open, not scaled by volatile_factor
 
 
+def falling_knife_reason(m5, floor):
+    """Skip a buy whose fresh 5-min change is under [executor.entry_min_m5_pct] (2026-11-19: all PAPER buys at
+    m5 -15..-30%: 28 trades, 2 wins, -$54.60; zincir fills only: 20 trades, 1 win, -$20.42). None/0 = off."""
+    if m5 is None or floor is None or float(floor) >= 0:
+        return None
+    m5, floor = float(m5), float(floor)
+    return f"düşen bıçak: 5dk %{m5:.0f} < %{floor:g} → girmedim" if m5 < floor else None
+
+
 def risk_snapshot(rc, volatile):
     """Risk lines frozen onto the position at open (later setting changes never move them).
     Volatile coins get × risk.volatile_factor here, once. Take-profit is snapshotted as-is."""
@@ -157,6 +166,9 @@ class Executor(Agent):
         capped = m5_cap_reason(p1.get("chg_m5"), self.db.get("analyst.max_m5_change_pct", 100))
         if capped:
             return self._skip(mint, capped)
+        falling = falling_knife_reason(p1.get("chg_m5"), c.get("entry_min_m5_pct", -15))
+        if falling:
+            return self._skip(mint, falling)
         size, note = size_ticket(stack_now(self.db), c, p1.get("liq_usd"))
         if size is None:
             return self._skip(mint, note)

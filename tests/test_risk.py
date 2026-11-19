@@ -1,6 +1,7 @@
 """3 test_risk — +25% then 13% off the top = trail; -6.1% = stop; 3h at +4% = timeout; loosening the
 stop never moves an open stop down; "set stop to -8%" → new position reads -8%, the old one -6%.
 Since 2026-11-12 the first trail hit sells half and the runner trails 30%; open stops are a snapshot."""
+from conftest import no_lock
 import asyncio
 
 import commands
@@ -30,6 +31,7 @@ def open_pos(db, mint, stop_pct=None, t=0.0):
 
 
 def test_trail_stop_timeout(db):
+    no_lock(db)
     t = [100.0]
     r, n = mk(db, t)
     open_pos(db, "TR", t=100); open_pos(db, "ST", t=100)

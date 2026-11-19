@@ -200,11 +200,14 @@ def make_app(desk):
         return {"agents": agent_cards()}
 
     @app.get("/api/agents/{name}/decisions", dependencies=A)
-    def decisions(name: str):
+    def decisions(name: str, limit: int = 20, mint: str = None):
         if name not in config.AGENTS:
             raise HTTPException(404, "unknown agent")
-        rows = db.q("SELECT d.ts, d.agent, d.mint, d.decision AS kind, d.reason AS text, c.symbol FROM decisions d "
-                    "LEFT JOIN coins c USING(mint) WHERE agent=? ORDER BY d.id DESC LIMIT 20", (name,))
+        sql, args = ("SELECT d.ts, d.agent, d.mint, d.decision AS kind, d.reason AS text, c.symbol FROM decisions d "
+                     "LEFT JOIN coins c USING(mint) WHERE agent=?"), [name]
+        if mint:
+            sql += " AND d.mint=?"; args.append(mint)
+        rows = db.q(sql + " ORDER BY d.id DESC LIMIT ?", args + [max(1, min(int(limit), 500))])
         for r in rows:
             if r["mint"]:
                 r["link"] = links.coin_url(r["mint"], "solana")

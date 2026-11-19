@@ -33,3 +33,9 @@ class FakeSrc:
 
 async def no_sleep(*_a, **_k):
     return None
+
+
+def no_lock(db):
+    """Trail/half-sale mechanics tests run with the 2026-11-19 profit-lock ladder off (it would sell first)."""
+    db.set("risk.lock1_pct", 0)
+    db.set("risk.lock2_pct", 0)

@@ -30,6 +30,7 @@ def test_settings_defaults(db):
 def test_normal_vs_volatile_entry(db):
     db.set("executor.max_open", 4)
     db.set("risk.volatile_factor", 0.5)
+    db.set("executor.entry_min_m5_pct", -30)          # the -18 dump below would be a falling-knife skip (2026-11-19)
     pn, n = buy(db, "NORM", 5)
     pv, n2 = buy(db, "VOL", 20)
     pd, _ = buy(db, "DUMP", -18)                      # abs(): a -18% 5-min move is volatile too

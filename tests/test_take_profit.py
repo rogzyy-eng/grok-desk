@@ -1,5 +1,6 @@
 """Take-profit partial sale: risk.tp_pct / tp_sell_frac, runner breakeven stop and trail,
 no double half-sale, and the HAPPY immediate-exit regression."""
+from conftest import no_lock
 import asyncio
 
 import config
@@ -108,6 +109,7 @@ def test_runner_trail_exit(db):
 
 
 def test_no_double_half_sale(db):
+    no_lock(db)
     t = [100.0]
     ex, r, _ = desk(db, t, src=FakeSrc(price=1.0, liq=LIQ))
     p = buy(ex, db, "ND", liq=LIQ)
@@ -142,6 +144,7 @@ def test_happy_immediate_exit_regression(db):
     the runner sale both landed in the same minute because the runner still trailed the stale
     peak (1.61 × 0.70 = 1.127 > 1.04). Peak now restarts at the fill, so the same price holds.
     TP is off so this isolates the gap-through-trail path (HAPPY predated take-profit)."""
+    no_lock(db)
     t = [100.0]
     db.set("risk.breakeven_at_pct", 0)                          # isolate the trail path (no breakeven lock)
     db.set("risk.tp_pct", 0)
@@ -173,6 +176,7 @@ def test_happy_immediate_exit_regression(db):
 def test_tp_and_happy_gap_on_chain_and_poll(db):
     """Both price sources share assess(); TP on a websocket tick, and a HAPPY-style gap on a poll,
     must behave the same."""
+    no_lock(db)
     # --- on-chain TP ---
     r, n = onchain_mk(db)
     onchain_open(db, "M")
