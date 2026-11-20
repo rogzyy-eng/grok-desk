@@ -12,7 +12,11 @@ import pytest  # noqa: E402
 @pytest.fixture
 def db(tmp_path):
     from db import DB
-    return DB(tmp_path / "t.db")
+    d = DB(tmp_path / "t.db")
+    # Fixture clocks (t=100 -> 02:00 Istanbul) and wall-clock runs at night would hit the 00-06 quiet hours;
+    # tests/test_quiet_hours.py turns it back on explicitly.
+    d.set("executor.quiet_hours_enabled", False)
+    return d
 
 
 class FakeSrc:

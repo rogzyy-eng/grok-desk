@@ -40,6 +40,31 @@ SNAPSHOT = ("stop_pct", "trail_start_pct", "trail_pct", "timeout_h", "runner_tra
 SNAPSHOT_PLAIN = ("tp_pct", "tp_sell_frac")  # frozen at open, not scaled by volatile_factor
 
 
+def in_quiet_hours(now_ts, start_h, end_h, tz="Europe/Istanbul"):
+    """True when now (desk time zone) is inside [start_h, end_h). Wraps past midnight (22 -> 6).
+    start == end = never quiet."""
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+    start_h, end_h = float(start_h) % 24, float(end_h) % 24
+    if start_h == end_h:
+        return False
+    t = datetime.fromtimestamp(now_ts, ZoneInfo(tz or "Europe/Istanbul"))
+    h = t.hour + t.minute / 60 + t.second / 3600
+    return start_h <= h < end_h if start_h < end_h else (h >= start_h or h < end_h)
+
+
+def quiet_reason(db, now_ts):
+    """Quiet-hours entry filter (2026-11-20): no new positions 00-06 Europe/Istanbul by default. Since the
+    f86c7b7 install, night 5 trades / 0 wins / -$4.31 vs day 13 / +$5.32; all-time night -$1.13/trade vs day
+    -$0.83. Open positions are still managed. -> Turkish reason or None."""
+    if not db.get("executor.quiet_hours_enabled", True):
+        return None
+    s, e = db.get("executor.quiet_start_h", 0), db.get("executor.quiet_end_h", 6)
+    if in_quiet_hours(now_ts, s, e, db.get("desk.tz", "Europe/Istanbul")):
+        return f"gece saati: giriş yok ({int(float(s)):02d}:00–{int(float(e)):02d}:00)"
+    return None
+
+
 def falling_knife_reason(m5, floor):
     """Skip a buy whose fresh 5-min change is under [executor.entry_min_m5_pct] (2026-11-19: all PAPER buys at
     m5 -15..-30%: 28 trades, 2 wins, -$54.60; zincir fills only: 20 trades, 1 win, -$20.42). None/0 = off."""
@@ -152,6 +177,9 @@ class Executor(Agent):
         mode = self.db.get("desk.mode", "PAPER")
         now = self.clock()
         name = self.db.coin_name(mint)
+        quiet = quiet_reason(self.db, now)
+        if quiet:
+            return self._skip(mint, quiet)
         if open_count(self.db) >= c["max_open"]:
             return self._skip(mint, f"{c['max_open']} positions already open")
         blocked = reentry_skip_reason(self.db, mint, now, c.get("reentry_cooldown_min", 60))
@@ -263,6 +291,9 @@ class Executor(Agent):
         now = self.clock()
         if mode != "PAPER":
             return self._skip(mint, "kopya sadece PAPER'da açılır")
+        quiet = quiet_reason(self.db, now)
+        if quiet:
+            return self._skip(mint, quiet)
         cap = int(self.db.get("copy.max_open", 3) or 0)
         if open_count(self.db, "copy") >= cap:
             return self._skip(mint, f"kopya limiti doldu ({cap})")
