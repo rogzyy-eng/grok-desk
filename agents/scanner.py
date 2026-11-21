@@ -6,6 +6,7 @@ import json
 import re
 
 import fields
+from onchain import QUOTE_MINTS as QUOTE_OK
 from sources import FetchError
 from agents.base import Agent, iso, money
 
@@ -111,6 +112,14 @@ class Scanner(Agent):
             if waited > c["max_wait_min"]:
                 return self.kill(coin, f"no PumpSwap pool after {c['max_wait_min']} min", None)
             return "wait"
+        if c.get("sol_quote_only", True) and best.get("quote_mint") and best["quote_mint"] not in QUOTE_OK:
+            # 2026-11-21: pools quoted in another memecoin (Vice Cat / TTWO): liquidity $ follows that token,
+            # rug_early's SOL-drain watch is blind, 0 wins in 9 PAPER trades. Use a SOL/USDC pool or skip.
+            alt = fields.best_pair([p for p in pairs if isinstance(p, dict) and
+                                    (p.get("quoteToken") or {}).get("address") in QUOTE_OK])
+            if alt is None:
+                return self.kill(coin, f"quote {best.get('quote_symbol') or best['quote_mint'][:6]} (not SOL/USDC)", None)
+            best = alt
         self.db.insert("prices", {"mint": mint, "ts": now, "price": best["price_usd"], "volume_m5": best["vol_m5"],
                                   "liquidity_usd": best["liq_usd"]})
         h24 = max(coin["max_h24_pct"] or -1e9, best["chg_h24"] if best["chg_h24"] is not None else -1e9)

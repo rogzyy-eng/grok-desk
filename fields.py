@@ -51,6 +51,8 @@ def pair(p: dict) -> dict:
     out["base_mint"] = _get(p, "baseToken.address")   # SOURCE: dexscreener_latest_dex_tokens.json
     out["symbol"] = _get(p, "baseToken.symbol")       # SOURCE: same
     out["name"] = _get(p, "baseToken.name")
+    out["quote_mint"] = _get(p, "quoteToken.address")   # SOL / USDC normally; another memecoin = TTWO-style pool
+    out["quote_symbol"] = _get(p, "quoteToken.symbol")
     return out
 
 

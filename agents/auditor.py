@@ -137,6 +137,8 @@ class Auditor(Agent):
             nonlocal holders
             holders = sum(1 for a in accts if a["amount"] > 0)
             self.db.update("coins", "mint=?", (mint,), {"holders": holders})
+            if holders < float(c.get("min_holders", 0) or 0):   # 2026-11-21: <100 holders = 0 wins / 16 PAPER trades
+                raise Red(f"only {holders} holders (< {c['min_holders']:g})", "rpc")
             groups = fields.delegations([a for a in accts if a["amount"] > 0])
             ctx["delegations"] = groups
             if groups:
